@@ -52,7 +52,7 @@ policy:
 Why a skill and not a command:
 
 - A skill can be kept from implicit use. The file is `agents/openai.yaml` (`ext/skills/src/loader/mod.rs:22-23`), its `policy.allow_implicit_invocation` is read by `skills/src/metadata.rs:53-56,93-98`, and a skill without it is implicit by default (`skills/src/model.rs:23-28`). Explicit selection by `$name` does not consult the field (`skills/src/selection.rs:44-112`).
-- A command is not a separate thing in 0.172. The manifest's `commands` paths are migrated into skills named `source-command-<name>` (`core-plugins/src/command_migration.rs:14,339-341`, `core-plugins/src/command_migration/plugin.rs:25-53`), nothing in the migration marks them manual-only, and a migrated command is dropped when it uses `$ARGUMENTS`, `!` shell lines or `@` file references (`command_migration.rs:418-427`) or runs past 4,000 bytes (`command_migration/plugin.rs:17`). kru's manual skills hit all three.
+- A command is not a separate thing in 0.172. The manifest's `commands` paths are migrated into skills named `source-command-<name>` (`core-plugins/src/command_migration.rs:14,339-341`, `core-plugins/src/command_migration/plugin.rs:25-53`), nothing in the migration marks them manual-only, and a migrated command is dropped when it uses `$ARGUMENTS`, `!` shell lines or `@` file references (`command_migration.rs:418-427`) or runs past 4,000 bytes (`command_migration/plugin.rs:17`). Commands would fail kru's manual skills on two counts: nothing would keep them manual-only, and 20 of the 32 run past 4,000 bytes and would be dropped.
 
 A skill is called with `$name`, `$kru:name` for a plugin skill (`skills/src/mentions.rs:41,79-86`; `:226-228` lets a name hold a colon).
 
