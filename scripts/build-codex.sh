@@ -454,6 +454,8 @@ def install(home):
     print(f"config.toml is left as it is. To turn the plugin on, add to {home}/config.toml:")
     print(f'  [plugins."{PLUGIN_ID[0]}@{PLUGIN_ID[1]}"]')
     print("  enabled = true")
+    print("If this install changed the build, approve the hooks again in Codex: it stops running a")
+    print("plugin's hooks when any of the plugin's files change.")
 
 # ---- check ---------------------------------------------------------------------------------------
 

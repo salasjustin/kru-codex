@@ -10,7 +10,7 @@ bash scripts/build-codex.sh --check /tmp/kru-codex    # the checks scripts/verif
 
 The build needs bash and Python 3.11 or later (it reads TOML with `tomllib`); the hooks need `jq` at run time.
 
-The install leaves `config.toml` alone and prints the two lines that turn the plugin on. Hook commands need a one-time trust in Codex.
+The install leaves `config.toml` alone and prints the two lines that turn the plugin on. Codex runs the hook commands only after you approve them, and the approval is tied to a hash of the plugin's files (`hooks/src/engine/plugin_trust.rs`). Approve them again after every install that changed the build; until then Codex skips them.
 
 ## What is missing
 

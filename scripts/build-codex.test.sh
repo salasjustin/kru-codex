@@ -95,6 +95,7 @@ check "install puts the roles in the home's agents folder" '[ "$(ls "$home"/agen
 check "install leaves config.toml and a role it did not write alone" '[ "$(cat "$home/config.toml")" = "model = \"kept\"" ] && [ -f "$home/agents/mine.toml" ]'
 check "install resolves the plugin root to the install path" 'grep -q "$plugin/references/routing.md" "$plugin/skills/lead/SKILL.md" && ! grep -rq "<plugin-root>" "$plugin/skills" "$plugin/roles"'
 check "install names the config entry and does not write it" 'printf "%s" "$msg" | grep -q "plugins.\"kru@kru\"" && ! grep -q plugins "$home/config.toml"'
+check "install says the hooks need approving again after a changed build" 'printf "%s" "$msg" | grep -qi "approve the hooks again"'
 check "an installed tree passes the check" 'bash "$build" --check "$plugin" >/dev/null 2>&1'
 bash "$build" --install "$home" >/dev/null 2>&1
 check "a second install is a no-op in effect" '[ "$(ls "$home"/agents/*.toml | wc -l | tr -d " ")" = "$(( $(ls "$root/agents" | wc -l) + 1 ))" ]'

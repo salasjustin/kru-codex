@@ -169,7 +169,7 @@ The scripts then run unchanged on a transcript that has what they scan for. A sk
 
 ## What does not carry over
 
-- **Hook trust.** A plugin's hook commands must be trusted before they run (`hooks/src/engine/command_runner.rs:230-249`). The state is stored per hook in the config (`config/src/hook_config.rs:29-38`), which the installer does not edit, so each hook is reviewed and trusted once in Codex.
+- **Hook trust.** A plugin's hook commands must be trusted before they run (`hooks/src/engine/command_runner.rs:230-249`). The state is stored per hook in the config (`config/src/hook_config.rs:29-38`), which the installer does not edit. The approval holds a hash of every file in the plugin, checked before each hook runs; when it differs the hook is skipped with "plugin contents changed; hook approval required" (`hooks/src/engine/plugin_trust.rs:28-49`, `hooks/src/engine/plugin_fingerprint.rs`). So every install that changed the build needs the hooks approved again in Codex, and `--install` says so.
 - **Plugin activation.** Described under *Layout*: two lines in `config.toml`.
 - **Plugin options.** The Claude plugin's settings screen (`KRU_STORE_REPO` and the four `KRU_NO_*` switches) has no counterpart; export the same variables. `scripts/kru-store.sh` already honours them.
 - **The repo sheet.** `skills/setup` writes the sheet to `.claude/CLAUDE.md`, which Codex does not load on its own. The skills that read it still read that path.
