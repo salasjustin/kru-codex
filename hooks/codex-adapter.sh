@@ -6,12 +6,13 @@
 #
 # what changes on the way in:
 #   spawn_agent       {agent_type, message, task_name} -> the Agent call's {subagent_type, prompt, description}
-#   a shell read of a lead, designer, brainstorm or brief SKILL.md -> a Read of that file
+#   a shell read of a lead, designer, brainstorm or brief SKILL.md -> a Read of that file, for
+#                        require-lead only; every other hook sees the Bash call
 #   transcript_path   -> a shadow transcript of the shape the two transcript gates scan. Codex's own
 #                        transcript is a different format, so `record-prompt` (a UserPromptSubmit
 #                        hook) writes each prompt into the shadow, `$kru:lead` mentions as the
-#                        command line a /kru:lead would have left, and require-lead adds each
-#                        skill-file read it lets through
+#                        command line a /kru:lead would have left, and `record-read` (a PostToolUse
+#                        hook on Bash) adds each skill-file read once the call has run
 # what changes on the way out:
 #   an updatedInput from check-handoff gets permissionDecision "allow" beside it, which Codex
 #   requires and Claude Code does not, and its prompt goes back into spawn_agent's `message`
@@ -44,13 +45,11 @@ if [ "$hook" = record-prompt ]; then
   exit 0
 fi
 
-script="$here/$hook.sh"
-[ -f "$script" ] || exit 0
-
 # a shell read counts as a Read only as one command with one path, bare or in balanced quotes: no
 # separator, redirect, expansion or escape anywhere, since a false match lets a command past the gates.
-# require-lead still decides whether the path is the plugin's own contract
-norm=$(printf '%s' "$input" | jq -c --arg shadow "$shadow" '
+# require-lead still decides whether the path is the plugin's own contract. only require-lead and
+# record-read see the rename: brainstorm-guard exempts a read-only Bash call but gates a Read
+norm=$(printf '%s' "$input" | jq -c --arg shadow "$shadow" --arg hook "$hook" '
   (.tool_input.command? // "" | if type == "string" then . else "" end) as $cmd
   | "skills/(lead|designer|brainstorm|brief)/SKILL\\.md" as $file
   | "[^\\s\\x27\"`$\\\\|;&<>()]*" as $bare
@@ -64,12 +63,24 @@ norm=$(printf '%s' "$input" | jq -c --arg shadow "$shadow" '
         prompt: (.tool_input.message // ""),
         description: (.tool_input.task_name // "")
       }
-    elif .tool_name == "Bash" and $read != null then
+    elif .tool_name == "Bash" and $read != null and ($hook == "require-lead" or $hook == "record-read") then
       .tool_name = "Read"
       | .tool_input = {file_path: ($read.sq // $read.dq // $read.bare)}
     else . end
   | if $shadow != "" and .hook_event_name == "PreToolUse" then .transcript_path = $shadow else . end' 2>/dev/null) || exit 0
 [ -n "$norm" ] || exit 0
+
+# PostToolUse fires only for a call that ran, so a read some PreToolUse hook refused is never recorded
+if [ "$hook" = record-read ]; then
+  [ -n "$shadow" ] || exit 0
+  mkdir -p "$shadow_dir" 2>/dev/null || exit 0
+  printf '%s' "$norm" | jq -c 'select(.tool_name == "Read" and .tool_input.file_path != null)
+    | {type: "assistant", message: {content: [{type: "tool_use", name: "Read", input: {file_path: .tool_input.file_path}}]}}' >> "$shadow" 2>/dev/null
+  exit 0
+fi
+
+script="$here/$hook.sh"
+[ -f "$script" ] || exit 0
 
 if [ -n "$shadow" ] && [ "$event" = PreToolUse ]; then
   case "$hook" in require-lead|brainstorm-guard)
@@ -81,11 +92,6 @@ err=$(mktemp 2>/dev/null) || exit 0
 trap 'rm -f "$err"' EXIT
 out=$(printf '%s' "$norm" | bash "$script" "$@" 2>"$err")
 rc=$?
-
-if [ "$hook" = require-lead ] && [ -n "$shadow" ] && [ "$event" = PreToolUse ]; then
-  printf '%s' "$norm" | jq -c 'select(.tool_name == "Read" and .tool_input.file_path != null)
-    | {type: "assistant", message: {content: [{type: "tool_use", name: "Read", input: {file_path: .tool_input.file_path}}]}}' >> "$shadow" 2>/dev/null
-fi
 
 if [ "$hook" = check-handoff ] && [ -n "$out" ]; then
   orig=$(printf '%s' "$input" | jq -c '.tool_input // {}' 2>/dev/null)

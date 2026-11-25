@@ -48,6 +48,8 @@ patch='*** Begin Patch
 *** End Patch'
 edit_call() { payload PreToolUse "$1" "$(jq -nc --arg p "$patch" '{tool_name:"apply_patch", tool_use_id:"u1", tool_input:{command:$p}}')"; }
 bash_call() { payload PreToolUse "$1" "$(jq -nc --arg c "$2" '{tool_name:"Bash", tool_use_id:"u1", tool_input:{command:$c}}')"; }
+# the PostToolUse Codex sends once a shell call has run, which is when a read reaches the shadow
+ran_call() { run PostToolUse record-read "$(payload PostToolUse "$1" "$(jq -nc --arg c "$2" '{tool_name:"Bash", tool_use_id:"u1", tool_input:{command:$c}, tool_response:""}')")"; }
 prompt() { run UserPromptSubmit record-prompt "$(payload UserPromptSubmit "$1" "$(jq -nc --arg p "$2" '{prompt:$p}')")"; }
 
 # --- require-lead: the lead gate, fed by the shadow transcript ---------------------------------------
@@ -65,8 +67,9 @@ report "a \$kru:lead mention in the prompt loads the contract" "$([ "$code" -eq 
 prompt s3 "start on the build"
 run PreToolUse require-lead "$(bash_call s3 "cat $root/skills/lead/SKILL.md")"
 c1=$code
+ran_call s3 "cat $root/skills/lead/SKILL.md"
 run PreToolUse require-lead "$(edit_call s3)"
-report "reading skills/lead/SKILL.md through the shell loads the contract" "$([ "$c1" -eq 0 ] && [ "$code" -eq 0 ] && [ -z "$err" ] && echo true || echo false)" "exits $c1/$code [$err]"
+report "a shell read of skills/lead/SKILL.md that ran loads the contract" "$([ "$c1" -eq 0 ] && [ "$code" -eq 0 ] && [ -z "$err" ] && echo true || echo false)" "exits $c1/$code [$err]"
 
 prompt s4 "look around"
 run PreToolUse require-lead "$(bash_call s4 "git status")"
@@ -87,6 +90,7 @@ n=0
 read_case() { # <open|held> <label> <command>
   n=$((n+1)); prompt rd$n "go"
   run PreToolUse require-lead "$(bash_call rd$n "$3")"; c1=$code; e1=$err
+  [ "$c1" -eq 0 ] && ran_call rd$n "$3"
   run PreToolUse require-lead "$(edit_call rd$n)"; c2=$code; e2=$err
   local ok=false
   if [ "$1" = open ]; then [ "$c1" -eq 0 ] && [ "$c2" -eq 0 ] && [ -z "$e1$e2" ] && ok=true
@@ -174,6 +178,18 @@ run PreToolUse brainstorm-guard "$(edit_call b1)"
 report "the user's go unlocks the writes" "$([ "$code" -eq 0 ] && echo true || echo false)" "exit $code [$err]"
 run PreToolUse brainstorm-guard "$(edit_call b-none)"
 report "a session that never brainstormed is untouched" "$([ "$code" -eq 0 ] && echo true || echo false)" "exit $code [$err]"
+
+prompt b2 '$kru:brainstorm a new cli'
+run PreToolUse brainstorm-guard "$(bash_call b2 "cat $root/skills/brief/SKILL.md")"
+report "in a locked brainstorm, a shell read of skills/brief/SKILL.md passes" "$([ "$code" -eq 0 ] && echo true || echo false)" "exit $code [$err]"
+
+# a call another hook refuses never runs, so Codex sends no PostToolUse for it
+prompt b3 '$kru:brainstorm a new cli'
+run PreToolUse require-lead "$(bash_call b3 "cat $root/skills/brief/SKILL.md")"
+run PreToolUse brainstorm-guard "$(edit_call b3)"
+shadow_b3=$(find "$home" -name 'b3.jsonl')
+read_lines=$(grep -c '"name":"Read"' "$shadow_b3" 2>/dev/null)
+report "a read some hook refuses leaves no Read line and the next edit stays blocked" "$([ "$code" -eq 2 ] && [ -n "$shadow_b3" ] && [ "${read_lines:-0}" -eq 0 ] && echo true || echo false)" "exit $code, $read_lines Read line(s) in [$shadow_b3]"
 
 # --- check-handoff: the brief gate on spawn_agent --------------------------------------------------------
 spawn() { # <sid> <agent_type> <message>

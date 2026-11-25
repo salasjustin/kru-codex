@@ -143,6 +143,7 @@ HOOKS = [
     ("PreToolUse", "spawn_agent", "check-handoff", [], 10),
     ("PreToolUse", "Write|Edit|Bash", "brainstorm-guard", [], 10),
     ("PostToolUse", "spawn_agent", "log-dispatch", [], 10),
+    ("PostToolUse", "Bash", "record-read", [], 10),
     ("SubagentStop", None, "log-return", [], 10),
     ("Stop", None, "nudge-audit", [], 10),
     ("Stop", None, "store-sync", ["stop"], 30),
@@ -153,6 +154,9 @@ ROOT_DOCS = ["ROSTER.md", "SOURCES.md", "TRACKER.md", "PREFERENCES.md"]
 COPY_DIRS = ["references", "scripts/asset"]
 RUNTIME_SCRIPTS = ["scripts/kru-store.sh", "scripts/kru-merge-lines.sh"]
 LEGAL = ["LICENSE", "NOTICE", "VERSION"]
+
+# hooks the adapter answers itself, with no script of their own: they write the shadow transcript
+ADAPTER_HOOKS = ("record-prompt", "record-read")
 
 # ---------------------------------------------------------------------------------------------
 
@@ -520,7 +524,7 @@ def check(out):
                     m = re.search(r"codex-adapter\.sh\" (\w+) ([\w-]+)", h["command"])
                     if not m or m.group(1) != event:
                         fail(f"hooks.json {event}: unreadable command {h['command']!r}")
-                    elif m.group(2) != "record-prompt" and not (out / "hooks" / f"{m.group(2)}.sh").is_file():
+                    elif m.group(2) not in ADAPTER_HOOKS and not (out / "hooks" / f"{m.group(2)}.sh").is_file():
                         fail(f"hooks.json {event}: no hooks/{m.group(2)}.sh in the tree")
     except Exception as e:
         fail(f"hooks.json: {e}")

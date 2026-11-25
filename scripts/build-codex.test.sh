@@ -46,6 +46,7 @@ check "no Claude model name is anywhere in the build" '[ "$scan" -eq 1 ]' "grep 
 mkdir -p "$sandbox/planted"; printf 'pin claude-opus-5-5\n' > "$sandbox/planted/id"; printf 'ask Sonnet\n' > "$sandbox/planted/word"
 check "the Claude model scan finds a planted model id and a planted model word" 'grep -rEl "$model_re" "$sandbox/planted" | wc -l | grep -q "^ *2$"'
 check "reflect and text-fix say they need a Claude Code session and stop there" 'for n in reflect text-fix; do grep -q "needs a Claude Code session" "$out/skills/$n/SKILL.md" && [ "$(wc -l < "$out/skills/$n/SKILL.md")" -lt 12 ] || exit 1; done'
+check "a shell call that ran reaches the adapter's record-read on PostToolUse" 'jq -e "[.hooks.PostToolUse[] | select(.matcher == \"Bash\") | .hooks[].command | select(test(\"codex-adapter\\\\.sh\\\" PostToolUse record-read \"))] | length == 1" "$out/hooks/hooks.json" >/dev/null'
 check "plugin-root and tool names are rewritten" '! grep -rq "CLAUDE_PLUGIN_ROOT" "$out/skills" && grep -q "<plugin-root>/references/routing.md" "$out/skills/lead/SKILL.md"'
 
 # the check fails on each thing it guards, and says which: a bare non-zero exit would stay green
