@@ -10,8 +10,8 @@
 #                        require-lead only; every other hook sees the Bash call
 #   transcript_path   -> a shadow transcript of the shape the two transcript gates scan. Codex's own
 #                        transcript is a different format, so `record-prompt` (a UserPromptSubmit
-#                        hook) writes each prompt into the shadow, `$kru:lead` mentions as the
-#                        command line a /kru:lead would have left, and `record-read` (a PostToolUse
+#                        hook) writes each prompt into the shadow, a `$kru:<skill>` mention as the
+#                        command line a /kru:<skill> would have left, and `record-read` (a PostToolUse
 #                        hook on Bash) adds each skill-file read once the call has run
 # what changes on the way out:
 #   an updatedInput from check-handoff gets permissionDecision "allow" beside it, which Codex
@@ -37,9 +37,13 @@ if [ "$hook" = record-prompt ]; then
   mkdir -p "$shadow_dir" 2>/dev/null || exit 0
   # a session that never ends leaves its shadow behind; keep the dir bounded
   find "$shadow_dir" -type f -mtime +7 -delete 2>/dev/null
-  printf '%s' "$input" | jq -c '
+  # a mention of a skill this plugin ships is that skill's run, tagged as its slash command would be
+  skills=$(cd "$here/../skills" 2>/dev/null && for d in */; do [ -f "$d/SKILL.md" ] && printf '%s\n' "${d%/}"; done)
+  printf '%s' "$input" | jq -c --arg skills "$skills" '
     (.prompt // "") as $p
-    | ([$p | scan("(?<![A-Za-z0-9_$])\\$kru:(lead|designer|brainstorm)(?![A-Za-z0-9_-])") | .[0]]
+    | ($skills | split("\n")) as $known
+    | ([$p | scan("(?<![A-Za-z0-9_$])\\$kru:([a-z][a-z0-9-]*)(?![A-Za-z0-9_-])") | .[0]
+          | select(. as $n | $known | index([$n]))]
         | unique | map("<command-name>/kru:" + . + "</command-name>") | join("")) as $cmd
     | {type: "user", message: {content: ($cmd + $p)}}' >> "$shadow" 2>/dev/null
   exit 0

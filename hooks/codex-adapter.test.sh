@@ -155,6 +155,11 @@ mention_case "a mention glued to a word does not load the contract" 'use x$kru:l
 mention_case "a mention without the dollar does not load the contract" 'use kru:lead for this'
 mention_case "a mention that continues into a longer name does not load the contract" 'use $kru:lead-x for this'
 
+# any kru skill run is that skill's contract, as a /kru:<skill> command is on Claude Code
+prompt sk1 '$kru:setup'
+run PreToolUse require-lead "$(edit_call sk1)"
+report "a \$kru:setup run is not stopped by the lead gate" "$([ "$code" -eq 0 ] && [ -z "$err" ] && echo true || echo false)" "exit $code [$err]"
+
 # a session id is a file name in the shadow dir and nothing more
 prompt '../escape' 'build it with $kru:lead please'
 prompt 'a/b' 'hello'
