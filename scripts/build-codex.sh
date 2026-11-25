@@ -131,8 +131,9 @@ def seat_model(seat, fm):
             return model, fm.get("effort") or None
     die(f"agents/{seat}.md is in no seat kind of MODEL_TABLE")
 
-# the Claude Code hooks that carry over, as (event, matcher, hook, script args, timeout in s). each
-# runs through hooks/codex-adapter.sh, which reshapes the payload and calls the same script.
+# the Codex build's hooks, as (event, matcher, hook, script args, timeout in s). each runs through
+# hooks/codex-adapter.sh, which reshapes the payload and calls the same script the Claude Code hook
+# runs, or for an ADAPTER_HOOKS entry answers itself.
 # not carried: check-task-tools (Codex has no task tools to switch on)
 HOOKS = [
     ("SessionStart", "startup", "setup-nudge", [], 10),
@@ -284,7 +285,7 @@ def build_skills(out, root):
         if not skill.is_file():
             die(f"{sdir.relative_to(REPO)}: no SKILL.md")
         if (sdir / "agents").exists():
-            die(f"{sdir.relative_to(REPO)}: has an agents/ folder, which holds Codex's per-skill metadata")
+            die(f"{sdir.relative_to(REPO)}: has an agents/ folder, where Codex keeps per-skill metadata; rename it")
         for f in sorted(sdir.rglob("*")):
             if not f.is_file() or not tracked(f):
                 continue
@@ -480,8 +481,8 @@ def check(out):
         p = man.get(key, "")
         if not p.startswith("./") or not (out / p[2:]).exists():
             fail(f"manifest {key} path {p!r} is not a ./ path to something in the tree")
-    # skills: folder name = frontmatter name, name under 64, a description, and a policy file exactly
-    # where the Claude Code skill keeps the model off it
+    # skills: folder name = frontmatter name, name at most 64 characters, a description, and a policy
+    # file exactly where the Claude Code skill keeps the model off it
     src_skills = {p.name: p for p in (REPO / "skills").iterdir() if p.is_dir()}
     built = {p.name: p for p in (out / "skills").iterdir() if p.is_dir()}
     if set(src_skills) != set(built):
@@ -517,7 +518,7 @@ def check(out):
                 fail(f"{f.name}: model {t.get('model')!r} / effort {t.get('model_reasoning_effort')!r} is not the table's {want}")
         if t.get("model") not in MODELS_ALL:
             fail(f"{f.name}: model {t.get('model')!r} is not a gateway model")
-    # hooks: parses, and every command names a script that is in the tree
+    # hooks: parses, and every command names an adapter hook or a script that is in the tree
     try:
         hj = json.loads((out / "hooks/hooks.json").read_text())
         for event, groups in hj["hooks"].items():

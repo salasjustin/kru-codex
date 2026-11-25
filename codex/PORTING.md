@@ -86,7 +86,7 @@ The rules are mechanical. A skill whose subject is Claude Code itself (`update`,
 
 ### Nested passes
 
-`reflect` and `text-fix` run through a nested `claude -p` session. A Codex session has no Claude login, so the nested call cannot run there. In this build both skills keep their name and description and their body is replaced by one notice: the pass needs a Claude Code session, say so and stop, do not attempt the call. A `codex exec` version is a later change.
+`reflect` and `text-fix` run through a nested `claude -p` session. A Codex session has no Claude login, so the nested call cannot run there. In this build both skills keep their name and description and their body is replaced by one notice: the pass needs a Claude Code session, say so and stop, do not attempt the call.
 
 ## Seats
 
@@ -106,7 +106,7 @@ A role's `<plugin-root>` is resolved the same way as in skills: to the install p
 
 ### Models
 
-A Codex session runs on a fixed set of models, never a Claude one. The table is `MODEL_TABLE` in `scripts/build-codex.sh`, in one place. A seat takes the model of its kind and, within the kind, of the tier its Claude `model:` pin names. Its `effort:` carries over unchanged as `model_reasoning_effort` (the values are `ReasoningEffort`'s, `protocol/src/openai_models.rs:75-88`), and a seat with no `effort:` gets none. Role fields: `model` is `config/src/config_toml.rs:179`, `model_reasoning_effort` is `:414`.
+A Codex session runs on a fixed set of models, never a Claude one. The table is `MODEL_TABLE` in `scripts/build-codex.sh`. A seat takes the model of its kind and, within the kind, of the tier its Claude `model:` pin names. Its `effort:` carries over unchanged as `model_reasoning_effort` (the values are `ReasoningEffort`'s, `protocol/src/openai_models.rs:75-88`), and a seat with no `effort:` gets none.
 
 | seat kind | seats | Opus | Sonnet | Haiku |
 |---|---|---|---|---|

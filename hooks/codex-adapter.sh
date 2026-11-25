@@ -7,7 +7,7 @@
 # what changes on the way in:
 #   spawn_agent       {agent_type, message, task_name} -> the Agent call's {subagent_type, prompt, description}
 #   a shell read of a lead, designer, brainstorm or brief SKILL.md -> a Read of that file, for
-#                        require-lead only; every other hook sees the Bash call
+#                        require-lead and record-read only; every other hook sees the Bash call
 #   transcript_path   -> a shadow transcript of the shape the two transcript gates scan. Codex's own
 #                        transcript is a different format, so `record-prompt` (a UserPromptSubmit
 #                        hook) writes each prompt into the shadow, a `$kru:<skill>` mention as the
