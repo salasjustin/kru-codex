@@ -2,7 +2,7 @@
 
 `scripts/build-codex.sh` generates a Codex plugin from this tree. Nothing it writes is committed, so the build cannot fall behind the Claude Code plugin: both come from the same skills, seat files and hook scripts. `scripts/verify.sh` builds into a temp dir and checks the result on every run.
 
-This file says what each part becomes, every rewrite rule, and what does not carry over. How to build and install it is in `codex/README.md`. Source lines are in the Codex repository at tag `rust-v0.172.0`; each is `path:lines` under `codex-rs/`. Every mapping below rests on reading those sources, not on a live Codex session, and each one a live session could contradict is marked **unverified**.
+This file says what each part becomes, every rewrite rule, and what does not carry over. How to build and install it is in the root `README.md`. Source lines are in the Codex repository at tag `rust-v0.172.0`; each is `path:lines` under `codex-rs/`. Every mapping below rests on reading those sources, not on a live Codex session, and each one a live session could contradict is marked **unverified**.
 
 ```
 scripts/build-codex.sh <out-dir>               build the plugin tree
