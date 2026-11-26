@@ -83,32 +83,55 @@ ROOT_NOTE = ("`<plugin-root>` below is the kru plugin directory: the one that ho
 # a seat whose description says it reports and does not edit gets a read-only sandbox
 READ_ONLY_SEAT = re.compile(r"\b(does not edit|no edits)\b|Reports only")
 
-# the model per seat. A Codex session runs on these models only, never a Claude one. A seat takes the
-# model of its kind and, within the kind, of the tier its Claude `model:` pin names ("*" is any tier).
-# Its `effort:` carries over unchanged as `model_reasoning_effort`. Every seat is listed once: a seat in
-# no kind, in two, or a name with no seat file fails the build until the table is fixed.
-OPUS, SONNET, HAIKU = "opus", "sonnet", "haiku"
+# the model per seat. A Codex session runs on these models only, never a Claude one, and every seat
+# takes the one model of its kind ("*": no tier lookup; a seat's Claude `model:` row is upstream
+# metadata and no longer picks anything). Its `effort:` carries over unchanged as
+# `model_reasoning_effort`, and MODEL_EFFORTS must list that effort for that model or the build fails.
+# Every seat is listed once: a seat in no kind, in two, or a name with no seat file fails the build
+# until the table is fixed.
+DEEP = "deepseek/deepseek-v4.1-flash-1017"
+UI = "minimax/minimax-m3.1-flash"
+KIMI = "moonshotai/kimi-k3.1-pro"
+LIGHT = "meta/muse-ember"
 MODEL_TABLE = [
-    # kind       seats                                                                        model by tier
-    ("ui", ["react-ui-builder", "svelte-ui-builder", "hono-ui-builder", "web-components-builder",
-            "extension-builder", "motion-designer", "conversion-copywriter", "ux-auditor",
-            "visual-reviewer", "accessibility-reviewer"],
-     {OPUS: "moonshotai/kimi-k3.1-pro", SONNET: "moonshotai/kimi-k3"}),
-    ("independent reviewer", ["code-reviewer", "architecture-reviewer"],
-     {"*": "openai/gpt-6.2-sol"}),
-    ("other", ["better-auth-specialist", "chariot-specialist", "cloudflare-builder", "dispatch-auditor",
-               "express-builder", "fly-platform-engineer", "go-fullstack-builder", "hono-builder",
-               "nextjs-builder", "node-developer", "nowpayments-specialist", "paypal-specialist",
-               "planner", "postgres-architect", "python-developer", "quickbooks-specialist",
-               "react-router-builder", "sanity-builder", "sqlite-architect", "stripe-specialist",
-               "sveltekit-builder", "tanstack-start-builder", "test-writer", "toolchain-engineer",
-               "turso-specialist", "vercel-perf-optimizer", "vercel-platform-engineer",
-               "zapier-specialist", "zig-developer"],
-     {OPUS: "zai/glm-5.3", SONNET: "zai/glm-5.3-flash", HAIKU: "zai/glm-5.3-flash"}),
+    # kind       seats                                                                        model
+    ("deep engineering", ["better-auth-specialist", "chariot-specialist", "cloudflare-builder",
+                          "express-builder", "fly-platform-engineer", "go-fullstack-builder", "hono-builder",
+                          "nextjs-builder", "node-developer", "nowpayments-specialist", "paypal-specialist",
+                          "postgres-architect", "python-developer", "quickbooks-specialist",
+                          "react-router-builder", "sanity-builder", "sqlite-architect", "stripe-specialist",
+                          "sveltekit-builder", "tanstack-start-builder", "turso-specialist",
+                          "vercel-platform-engineer", "zapier-specialist", "zig-developer"],
+     {"*": DEEP}),
+    ("ui, test and independent reviewer", ["react-ui-builder", "svelte-ui-builder", "hono-ui-builder",
+                                           "web-components-builder", "extension-builder", "motion-designer",
+                                           "test-writer", "code-reviewer"],
+     {"*": UI}),
+    ("planning and architecture review", ["planner", "architecture-reviewer"],
+     {"*": KIMI}),
+    ("visual review and lighter repeated work", ["conversion-copywriter", "ux-auditor", "visual-reviewer",
+                                                 "accessibility-reviewer", "dispatch-auditor",
+                                                 "toolchain-engineer", "vercel-perf-optimizer"],
+     {"*": LIGHT}),
 ]
-# available and assigned to no seat kind
-UNASSIGNED_MODELS = ["deepseek/deepseek-v4.1-flash"]
-MODELS_ALL = {m for _, _, by_tier in MODEL_TABLE for m in by_tier.values()} | set(UNASSIGNED_MODELS)
+MODELS_ALL = {m for _, _, by_tier in MODEL_TABLE for m in by_tier.values()}
+# the reasoning efforts each gateway model accepts, from its `reasoning_options` in the public model
+# list (https://ai-gateway.vercel.sh/v1/models, reviewed 2026-11-26). a pin outside this set has no
+# request the gateway would take, so the build refuses it rather than ship it.
+MODEL_EFFORTS = {
+    DEEP: {"none", "low", "high", "max"},
+    UI: {"low", "medium", "high", "xhigh", "max"},
+    KIMI: {"low", "high", "max"},
+    LIGHT: {"minimal", "low", "medium", "high", "xhigh", "max"},
+}
+if MODELS_ALL != set(MODEL_EFFORTS):
+    die(f"MODEL_EFFORTS lists {sorted(MODEL_EFFORTS)} but MODEL_TABLE assigns {sorted(MODELS_ALL)}")
+
+def effort_problem(seat, model, effort):
+    """a line when the seat's effort pin is not one its model accepts, else None."""
+    if effort and model in MODEL_EFFORTS and effort not in MODEL_EFFORTS[model]:
+        return f"agents/{seat}.md: effort {effort!r} is not one {model} accepts ({', '.join(sorted(MODEL_EFFORTS[model]))})"
+    return None
 
 def table_problems():
     """what is wrong with the table against the seat files, one line each."""
@@ -120,15 +143,17 @@ def table_problems():
     return bad
 
 def seat_model(seat, fm):
-    """(model, reasoning effort or None) for a seat, from its kind, its Claude Code pin and its effort."""
-    m = re.search(r"opus|sonnet|haiku", fm.get("model", ""))
-    tier = m.group(0) if m else None
+    """(model, reasoning effort or None) for a seat, from its kind and its effort."""
     for kind, names, by_tier in MODEL_TABLE:
         if seat in names:
-            model = by_tier.get(tier) or by_tier.get("*")
+            model = by_tier.get("*")
             if not model:
-                die(f"agents/{seat}.md: kind {kind!r} of MODEL_TABLE has no model for tier {tier!r}")
-            return model, fm.get("effort") or None
+                die(f"agents/{seat}.md: kind {kind!r} of MODEL_TABLE has no model for any tier")
+            effort = fm.get("effort") or None
+            problem = effort_problem(seat, model, effort)
+            if problem:
+                die(problem)
+            return model, effort
     die(f"agents/{seat}.md is in no seat kind of MODEL_TABLE")
 
 # the Codex build's hooks, as (event, matcher, hook, script args, timeout in s). each runs through
@@ -213,7 +238,8 @@ def rewrite_root(text, root):
     return text.replace("${CLAUDE_PLUGIN_ROOT}", root).replace("$CLAUDE_PLUGIN_ROOT", root)
 
 # a Claude model id in a document becomes the model its tier takes for most seats
-DOC_TIER_MODEL = {OPUS: "zai/glm-5.3", SONNET: "zai/glm-5.3-flash", HAIKU: "zai/glm-5.3-flash"}
+OPUS, SONNET, HAIKU = "opus", "sonnet", "haiku"
+DOC_TIER_MODEL = {OPUS: DEEP, SONNET: UI, HAIKU: LIGHT}
 
 def tier_model(tier):
     return DOC_TIER_MODEL[tier]
@@ -513,8 +539,12 @@ def check(out):
             fail(f"{f.name}: needs name = file name, a description and developer_instructions")
         src = REPO / "agents" / f"{f.stem}.md"
         if src.is_file():
-            want = seat_model(f.stem, parse_fm(split_fm(src.read_text(encoding="utf-8"), f.stem)[0]))
-            if (t.get("model"), t.get("model_reasoning_effort")) != want:
+            fm = parse_fm(split_fm(src.read_text(encoding="utf-8"), f.stem)[0])
+            want = seat_model(f.stem, fm)
+            problem = effort_problem(f.stem, t.get("model"), t.get("model_reasoning_effort"))
+            if problem:
+                fail(f"{f.name}: {problem}")
+            elif (t.get("model"), t.get("model_reasoning_effort")) != want:
                 fail(f"{f.name}: model {t.get('model')!r} / effort {t.get('model_reasoning_effort')!r} is not the table's {want}")
         if t.get("model") not in MODELS_ALL:
             fail(f"{f.name}: model {t.get('model')!r} is not a gateway model")

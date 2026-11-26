@@ -106,17 +106,24 @@ A role's `<plugin-root>` is resolved the same way as in skills: to the install p
 
 ### Models
 
-A Codex session runs on a fixed set of models, never a Claude one. The table is `MODEL_TABLE` in `scripts/build-codex.sh`. A seat takes the model of its kind and, within the kind, of the tier its Claude `model:` pin names. Its `effort:` carries over unchanged as `model_reasoning_effort` (the values are `ReasoningEffort`'s, `protocol/src/openai_models.rs:75-88`), and a seat with no `effort:` gets none.
+A Codex session runs on a fixed set of models, never a Claude one. The table is `MODEL_TABLE` in `scripts/build-codex.sh`, in one place: four seat kinds, each on one gateway model (`{"*": model}`). A seat's Claude `model:` pin names upstream metadata only and no longer picks anything. Its `effort:` carries over unchanged as `model_reasoning_effort` (the values are `ReasoningEffort`'s, `protocol/src/openai_models.rs:75-88`), and a seat with no `effort:` gets none. Role fields: `model` is `config/src/config_toml.rs:179`, `model_reasoning_effort` is `:414`.
 
-| seat kind | seats | Opus | Sonnet | Haiku |
+Reviewed November 26, 2026 against the public Gateway catalog, https://ai-gateway.vercel.sh/v1/models (518 models; Vercel documents the endpoint and its `reasoning_options` at https://vercel.com/docs/ai-gateway/models-and-providers). Prices are USD per 1M input / output tokens; efforts are the catalog's `reasoning_options.effort.values`.
+
+| seat kind | seats | model | price | efforts accepted |
 |---|---|---|---|---|
-| UI | `react-ui-builder`, `svelte-ui-builder`, `hono-ui-builder`, `web-components-builder`, `extension-builder`, `motion-designer`, `conversion-copywriter`, `ux-auditor`, `visual-reviewer`, `accessibility-reviewer` | `moonshotai/kimi-k3.1-pro` | `moonshotai/kimi-k3` | none: fails the build |
-| independent reviewer | `code-reviewer`, `architecture-reviewer` | `openai/gpt-6.2-sol` | `openai/gpt-6.2-sol` | `openai/gpt-6.2-sol` |
-| other | every remaining seat, listed by name in the table | `zai/glm-5.3` | `zai/glm-5.3-flash` | `zai/glm-5.3-flash` |
+| deep engineering | 24: the auth, payments, accounting, data, platform and long-horizon builders | `deepseek/deepseek-v4.1-flash-1017` | `$0.30` / `$1.20` | `none low high max` |
+| UI, tests and the code reviewer | 8: `react-ui-builder`, `svelte-ui-builder`, `hono-ui-builder`, `web-components-builder`, `extension-builder`, `motion-designer`, `test-writer`, `code-reviewer` | `minimax/minimax-m3.1-flash` | `$0.15` / `$0.60` | `low medium high xhigh max` |
+| planning and architecture review | `planner`, `architecture-reviewer` | `moonshotai/kimi-k3.1-pro` | `$2` / `$10` | `low high max` |
+| visual review and lighter repeated work | `conversion-copywriter`, `ux-auditor`, `visual-reviewer`, `accessibility-reviewer`, `dispatch-auditor`, `toolchain-engineer`, `vercel-perf-optimizer` | `meta/muse-ember` | `$0.10` / `$0.50` | `minimal low medium high xhigh max` |
 
-`deepseek/deepseek-v4.1-flash` stays in the table as available and is assigned to no seat kind.
+Every seat in the deep-engineering group is listed by name in the table. It replaced a Kimi / GLM / GPT-Sol tier table: `moonshotai/kimi-k3` (`$3` / `$15`), `zai/glm-5.3` (`$1.4` / `$4.4`), `zai/glm-5.3-flash` and `openai/gpt-6.2-sol` (`$2` / `$10`). Kimi K3.1 Pro is kept only where its reported long-horizon results matter most and calls are fewest: planning, whose mistakes propagate into every slice, and architecture review, kept on a family apart from the DeepSeek builders. `moonshotai/kimi-k3` stays unassigned. No GLM, GPT-Sol, retired Kimi K3 or Anthropic model name reaches a role file: `--check` fails on one, and on any Anthropic model id in the tree.
 
-Every seat is listed once. A seat in no kind, a name with no seat file, a seat listed twice, and a kind with no entry for a seat's tier all fail the build, so a new seat has to be placed before verify passes. `--check` also fails when a role's model or effort is not what the table gives its seat, and when a Claude model name appears anywhere in the build, scripts and seat files included. In documents, a Claude model id becomes the model most seats take for that tier (`zai/glm-5.3` for Opus, `zai/glm-5.3-flash` for Sonnet and Haiku), and a display name becomes `a model`.
+Official sources: https://api-docs.deepseek.com/updates/ and https://api-docs.deepseek.com/news/news261017/ (DeepSeek), https://www.minimax.io/blog/minimax-m31f (MiniMax), https://research.meta.ai/blog/muse-ember (Muse Ember), https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart (Kimi). The catalog's headline benchmark numbers came from different harnesses, so they inform the choice rather than prove seat quality; a live smoke call proves a model accepts an effort, not how well it works. This table is not a live-compatibility record: the build checks it offline.
+
+`MODEL_EFFORTS` lists each model's supported efforts. A seat whose `effort:` its model does not accept fails the build and names the set, so a pin is never shipped that the gateway would reject. `--check` holds a built role's model and effort to the same table, and to the source seat's pin.
+
+Every seat is listed once. A seat in no kind, a name with no seat file, a seat listed twice, and a kind whose model has no `MODEL_EFFORTS` row all fail the build, so a new seat has to be placed before verify passes. `--check` also fails when a role's model or effort is not what the table gives its seat, and when a Claude model name appears anywhere in the build, scripts and seat files included. In documents, a Claude model id becomes the model of the kind that most often reads it (`deepseek/deepseek-v4.1-flash-1017` for Opus, `minimax/minimax-m3.1-flash` for Sonnet, `meta/muse-ember` for Haiku), and a display name becomes `a model`.
 
 ## Hooks
 

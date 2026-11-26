@@ -34,10 +34,36 @@ check "every seat is a role" '[ "$(ls "$out/roles" | wc -l | tr -d " ")" = "$(ls
 check "a reviewer is read-only and a builder is not" 'grep -q "^sandbox_mode = \"read-only\"" "$out/roles/code-reviewer.toml" && ! grep -q "^sandbox_mode" "$out/roles/react-ui-builder.toml"'
 model_is() { grep -q "^model = \"$2\"" "$out/roles/$1.toml"; }
 effort_is() { if [ -z "$2" ]; then ! grep -q "^model_reasoning_effort" "$out/roles/$1.toml"; else grep -q "^model_reasoning_effort = \"$2\"" "$out/roles/$1.toml"; fi; }
-check "UI seats take Kimi by tier" 'model_is react-ui-builder moonshotai/kimi-k3.1-pro && model_is visual-reviewer moonshotai/kimi-k3'
-check "the independent reviewers take GPT at any tier" 'model_is code-reviewer openai/gpt-6.2-sol && model_is architecture-reviewer openai/gpt-6.2-sol'
-check "every other seat takes GLM by tier" 'model_is stripe-specialist zai/glm-5.3 && model_is test-writer zai/glm-5.3-flash && model_is dispatch-auditor zai/glm-5.3-flash'
-check "a seat's effort carries over unchanged, and none is invented" 'effort_is code-reviewer high && effort_is dispatch-auditor medium && effort_is react-ui-builder "" && effort_is test-writer ""'
+# the four value tiers, by the brief's exact seat lists
+deep_seats="better-auth-specialist chariot-specialist cloudflare-builder express-builder fly-platform-engineer go-fullstack-builder hono-builder nextjs-builder node-developer nowpayments-specialist paypal-specialist postgres-architect python-developer quickbooks-specialist react-router-builder sanity-builder sqlite-architect stripe-specialist sveltekit-builder tanstack-start-builder turso-specialist vercel-platform-engineer zapier-specialist zig-developer"
+ui_seats="react-ui-builder svelte-ui-builder hono-ui-builder web-components-builder extension-builder motion-designer test-writer code-reviewer"
+kimi_seats="planner architecture-reviewer"
+light_seats="conversion-copywriter ux-auditor visual-reviewer accessibility-reviewer dispatch-auditor toolchain-engineer vercel-perf-optimizer"
+check "the brief's four lists are 24, 8, 2 and 7 seats" '[ "$(printf "%s" "$deep_seats" | wc -w)" -eq 24 ] && [ "$(printf "%s" "$ui_seats" | wc -w)" -eq 8 ] && [ "$(printf "%s" "$kimi_seats" | wc -w)" -eq 2 ] && [ "$(printf "%s" "$light_seats" | wc -w)" -eq 7 ]'
+group_is() { # <model> <seats...>: every named seat has that one model, and no other role does
+  local m=$1; shift
+  for s in "$@"; do grep -q "^model = \"$m\"" "$out/roles/$s.toml" || { echo "$s is not on $m"; return 1; }; done
+  # the set of roles on the model is exactly this list
+  local got want; got=$(grep -l "^model = \"$m\"" "$out"/roles/*.toml | xargs -n1 basename | sed 's/\.toml$//' | sort | tr '\n' ' ')
+  want=$(printf '%s\n' "$@" | sort | tr '\n' ' ')
+  [ "$got" = "$want" ] || { echo "roles on $m: $got"; return 1; }
+}
+check "deep engineering takes DeepSeek, and only those seats do" 'group_is deepseek/deepseek-v4.1-flash-1017 $deep_seats'
+check "UI, tests and the code reviewer take MiniMax, and only those seats do" 'group_is minimax/minimax-m3.1-flash $ui_seats'
+check "planner and architecture reviewer take Kimi K3.1 Pro, and only those seats do" 'group_is moonshotai/kimi-k3.1-pro $kimi_seats'
+check "visual review and lighter work take Muse Ember, and only those seats do" 'group_is meta/muse-ember $light_seats'
+alloc="$(printf '%s %s %s %s' "$deep_seats" "$ui_seats" "$kimi_seats" "$light_seats" | tr " " "\n")"
+bad_count=$(printf '%s\n' "$alloc" | sort | uniq -d | wc -l | tr -d ' ')
+check "all 41 current seats are in the four lists exactly once" '[ "$(printf "%s\n" "$alloc" | grep -c .)" -eq 41 ] && [ "$bad_count" = 0 ] && [ "$(ls "$root/agents"/*.md | xargs -n1 basename | sed "s/\.md$//" | sort | tr "\n" " ")" = "$(printf "%s\n" "$alloc" | sort | tr "\n" " ")" ]'
+check "every role is on one of the four models, and every model is used" '[ "$(grep -h "^model = " "$out"/roles/*.toml | sort -u | tr "\n" " ")" = "$(printf "%s\n" "model = \"deepseek/deepseek-v4.1-flash-1017\"" "model = \"meta/muse-ember\"" "model = \"minimax/minimax-m3.1-flash\"" "model = \"moonshotai/kimi-k3.1-pro\"" | sort | tr "\n" " ")" ]'
+# K3 itself, GLM, GPT-Sol and Anthropic ids. The K3 rule matches 'moonshotai/kimi-k3' followed by the
+# closing quote or end of line, never 'kimi-k3.1-pro', and a planted pin keeps the pattern honest
+old_re='moonshotai/kimi-k3"|moonshotai/kimi-k3$|zai/glm|openai/gpt-6.2-sol|anthropic/|claude-(opus|sonnet|haiku|fable)'
+grep -rh "^model = " "$out"/roles | grep -Eq "$old_re"; scan=$?
+check "no old or Anthropic model id remains in generated roles" '[ "$scan" -eq 1 ]' "grep exit $scan"
+check "the old-id scan finds a planted Kimi K3 pin and not Kimi K3.1 Pro" '[ "$(printf "model = \"moonshotai/kimi-k3\"\nmodel = \"moonshotai/kimi-k3.1-pro\"\n" | grep -Ec "$old_re")" -eq 1 ]'
+check "a seat's effort carries over unchanged, and none is invented" 'effort_is planner high && effort_is architecture-reviewer high && effort_is code-reviewer high && effort_is ux-auditor high && effort_is dispatch-auditor medium && effort_is toolchain-engineer medium && effort_is vercel-perf-optimizer medium && effort_is react-ui-builder "" && effort_is test-writer ""'
+check "every effort pin is one its model accepts" 'for f in "$out"/roles/*.toml; do e=$(grep "^model_reasoning_effort" "$f" | sed "s/.*= \"//;s/\"//"); [ -n "$e" ] || continue; m=$(grep "^model = " "$f" | sed "s/.*= \"//;s/\"//"); case "$m:$e" in deepseek/deepseek-v4.1-flash-1017:none|deepseek/deepseek-v4.1-flash-1017:low|deepseek/deepseek-v4.1-flash-1017:high|deepseek/deepseek-v4.1-flash-1017:max|minimax/minimax-m3.1-flash:low|minimax/minimax-m3.1-flash:medium|minimax/minimax-m3.1-flash:high|minimax/minimax-m3.1-flash:xhigh|minimax/minimax-m3.1-flash:max|moonshotai/kimi-k3.1-pro:low|moonshotai/kimi-k3.1-pro:high|moonshotai/kimi-k3.1-pro:max|meta/muse-ember:minimal|meta/muse-ember:low|meta/muse-ember:medium|meta/muse-ember:high|meta/muse-ember:xhigh|meta/muse-ember:max) ;; *) echo "$f: $m/$e"; exit 1;; esac; done'
 # grep exits 1 for "no match" and 2 for an error: `! grep` would pass on both, so the clean read is
 # exit 1 exactly, paired with planted names the same pattern must find
 model_re='claude-(opus|sonnet|haiku|fable)|\b(Opus|Sonnet|Haiku|Fable)\b'
@@ -82,6 +108,41 @@ git -C "$root" ls-files -z | tar -C "$root" --null -T - -cf - | tar -C "$src" -x
 sed 's/^name: stripe-specialist$/name: zz-new-seat/' "$root/agents/stripe-specialist.md" > "$src/agents/zz-new-seat.md"
 msg=$(bash "$src/scripts/build-codex.sh" "$sandbox/unlisted" 2>&1); c=$?
 check "a new seat missing from the model table fails the build" '[ "$c" -ne 0 ] && printf "%s" "$msg" | grep -q "agents/zz-new-seat.md is in no seat kind"' "$msg"
+
+# an effort pin the model does not accept fails the build; one it accepts builds and is kept in the
+# role. --check holds both against the source table, and against a role it is handed as already built.
+esrc="$sandbox/esrc"; mkdir -p "$esrc"
+git -C "$root" ls-files -z | tar -C "$root" --null -T - -cf - | tar -C "$esrc" -xf -
+esed() { sed "$1" "$2" > "$2.tmp" && mv "$2.tmp" "$2"; }
+eout="$sandbox/efforts"
+esed 's/^effort: medium$/effort: minimal/' "$esrc/agents/dispatch-auditor.md"
+bash "$esrc/scripts/build-codex.sh" "$eout" >/dev/null 2>&1; c=$?
+check "Muse Ember accepts minimal, so dispatch-auditor builds on it" '[ "$c" -eq 0 ] && grep -q "^model_reasoning_effort = \"minimal\"" "$eout/roles/dispatch-auditor.toml"' "exit $c"
+rm -rf "$eout"
+esed 's/^effort: high$/effort: minimal/' "$esrc/agents/planner.md"
+msg=$(bash "$esrc/scripts/build-codex.sh" "$eout" 2>&1); c=$?
+check "an unsupported effort pin fails the build and names the model's set" '[ "$c" -eq 1 ] && printf "%s" "$msg" | grep -q "agents/planner.md: effort '\''minimal'\'' is not one moonshotai/kimi-k3.1-pro accepts (high, low, max)"' "exit $c [$msg]"
+check "a failed build leaves no tree" '[ ! -e "$eout" ]'
+esed 's/^effort: minimal$/effort: max/' "$esrc/agents/planner.md"
+bash "$esrc/scripts/build-codex.sh" "$eout" >/dev/null 2>&1; c=$?
+check "the same seat takes an effort Kimi does accept, and keeps it" '[ "$c" -eq 0 ] && grep -q "^model_reasoning_effort = \"max\"" "$eout/roles/planner.toml"' "exit $c"
+rm -rf "$eout"
+esed 's/^effort: high$/effort: none/' "$esrc/agents/code-reviewer.md"
+msg=$(bash "$esrc/scripts/build-codex.sh" "$eout" 2>&1); c=$?
+check "MiniMax has no none, so a none pin there fails the build" '[ "$c" -eq 1 ] && printf "%s" "$msg" | grep -q "is not one minimax/minimax-m3.1-flash accepts" ' "exit $c [$msg]"
+esed 's/^effort: none$/effort: xhigh/' "$esrc/agents/code-reviewer.md"
+bash "$esrc/scripts/build-codex.sh" "$eout" >/dev/null 2>&1; c=$?
+check "MiniMax does accept xhigh, and keeps it" '[ "$c" -eq 0 ] && grep -q "^model_reasoning_effort = \"xhigh\"" "$eout/roles/code-reviewer.toml"' "exit $c"
+rm -rf "$eout"
+esed 's/^model: claude-opus-5-5$/model: claude-opus-5-5\neffort: none/' "$esrc/agents/stripe-specialist.md"
+bash "$esrc/scripts/build-codex.sh" "$eout" >/dev/null 2>&1; c=$?
+check "an explicit none on DeepSeek builds and is kept" '[ "$c" -eq 0 ] && grep -q "^model_reasoning_effort = \"none\"" "$eout/roles/stripe-specialist.toml"' "exit $c"
+rm -rf "$esrc" "$eout"
+rm -rf "$sandbox/leak"; cp -R "$out" "$sandbox/leak"
+edit 's/^model_reasoning_effort = .*/model_reasoning_effort = "minimal"/' "$sandbox/leak/roles/code-reviewer.toml"
+msg=$(bash "$build" --check "$sandbox/leak" 2>&1); c=$?
+report "a built role with an unsupported effort fails the check" "$([ "$c" -ne 0 ] && printf '%s' "$msg" | grep -qF "effort 'minimal' is not one minimax/minimax-m3.1-flash accepts" && echo true || echo false)" "exit $c: $msg"
+rm -rf "$sandbox/leak"
 
 # the install
 home="$sandbox/codex-home"
