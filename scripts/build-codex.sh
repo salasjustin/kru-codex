@@ -72,8 +72,8 @@ NESTED_PASS = {"reflect", "text-fix"}
 NESTED_BODY = ("\n**This pass needs a Claude Code session.** It starts a nested `claude -p` session, and a "
                "Codex session has no Claude login, so it cannot run here. Say that in one line and stop. "
                "Do not attempt the nested call.\n")
-# a Claude model name never reaches the output: an id becomes the gateway model DOC_TIER_MODEL fixes
-# for its family, and a model's display name (Opus, Sonnet, Haiku, Fable, with or without a version)
+# a Claude model name never reaches the output: ROSTER.md's model section is regenerated from
+# MODEL_TABLE (roster_models), elsewhere an id becomes the gateway model DOC_TIER_MODEL fixes for its family, and a model's display name (Opus, Sonnet, Haiku, Fable, with or without a version)
 # becomes "a model"
 CLAUDE_MODEL_ID = re.compile(r"claude-(opus|sonnet|haiku)-[0-9][0-9.-]*")
 CLAUDE_MODEL_NAME = re.compile(r"\b(?:Claude )?(?:Opus|Sonnet|Haiku|Fable)(?: [0-9]+(?:\.[0-9]+)*)?\b")
@@ -247,6 +247,49 @@ DOC_TIER_MODEL = {OPUS: DEEP, SONNET: UI, HAIKU: LIGHT}
 def tier_model(tier):
     return DOC_TIER_MODEL[tier]
 
+# ROSTER.md's model section pins seats to Claude ids by Claude tier, which is not how this build picks
+# a seat's model. the build swaps it, from its heading through the closing "Fable 5 is the premium
+# tier" paragraph, for a table drawn from MODEL_TABLE. both anchors must be found, once each and in
+# order, or the build stops: an upstream edit that moves them would otherwise ship the Claude table
+ROSTER_MODEL_START = "## Model tiers\n"
+ROSTER_MODEL_END = "Fable 5 is the premium tier"
+EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+def roster_model_section():
+    rows = ["| seat kind | seats | model | efforts accepted |", "|---|---|---|---|"]
+    for kind, names, by_tier in MODEL_TABLE:
+        model = by_tier["*"]
+        seats = ", ".join(f"`{s}`" for s in names)
+        efforts = " ".join(f"`{e}`" for e in sorted(MODEL_EFFORTS[model], key=lambda e: (EFFORT_ORDER.index(e) if e in EFFORT_ORDER else len(EFFORT_ORDER), e)))
+        rows.append(f"| {kind} | {seats} | `{model}` | {efforts} |")
+    return (ROSTER_MODEL_START + "\n"
+            "In this build every seat runs on the one gateway model of its seat kind, never a Claude model. "
+            "A seat's `effort:` carries over as `model_reasoning_effort`, and the build refuses one its model "
+            "does not accept. The lead runs on the session's model.\n\n"
+            + "\n".join(rows) + "\n\n"
+            "`MODEL_TABLE` in `scripts/build-codex.sh` is the source of this table; README's *Models* "
+            "section has the prices.\n")
+
+def roster_models(text):
+    """ROSTER.md with its Claude model-pin section replaced by the MODEL_TABLE one."""
+    starts = [m.start() for m in re.finditer(r"(?m)^" + re.escape(ROSTER_MODEL_START), text)]
+    ends = [m.start() for m in re.finditer(r"(?m)^" + re.escape(ROSTER_MODEL_END), text)]
+    if len(starts) != 1 or len(ends) != 1 or ends[0] < starts[0]:
+        die(f"ROSTER.md: the model section needs one {ROSTER_MODEL_START.strip()!r} heading followed by one "
+            f"paragraph starting {ROSTER_MODEL_END!r} (found {len(starts)} and {len(ends)}); "
+            "update ROSTER_MODEL_START / ROSTER_MODEL_END in scripts/build-codex.sh to match ROSTER.md")
+    start, end = starts[0], text.find("\n", ends[0])
+    end = len(text) if end < 0 else end + 1
+    between = text[start + len(ROSTER_MODEL_START):ends[0]]
+    if re.search(r"(?m)^#{1,2} ", between):
+        die(f"ROSTER.md: a heading sits between {ROSTER_MODEL_START.strip()!r} and the paragraph starting "
+            f"{ROSTER_MODEL_END!r}; the model section would swallow it. update ROSTER_MODEL_START / "
+            "ROSTER_MODEL_END in scripts/build-codex.sh to match ROSTER.md")
+    return text[:start] + roster_model_section() + text[end:]
+
+# source documents the build changes before the rules apply, by path
+DOC_TRANSFORMS = {"ROSTER.md": roster_models}
+
 def rewrite_models(text):
     text = CLAUDE_MODEL_ID.sub(lambda m: tier_model(m.group(1)), text)
     text = CLAUDE_MODEL_NAME.sub("a model", text)
@@ -288,6 +331,8 @@ def copy_file(src, dst, root, rel, md_rules=True):
     dst.parent.mkdir(parents=True, exist_ok=True)
     if is_text(src):
         text = src.read_text(encoding="utf-8")
+        if rel in DOC_TRANSFORMS:
+            text = DOC_TRANSFORMS[rel](text)
         text = rewrite(text, root, rel) if md_rules and src.suffix == ".md" else rewrite_root(text, root)
         if root == ROOT_TOKEN and src.suffix == ".md" and ROOT_TOKEN in text and "install dir" not in text:
             text = prepend_note(text, ROOT_NOTE)
@@ -551,6 +596,9 @@ def check(out):
                 fail(f"{f.name}: model {t.get('model')!r} / effort {t.get('model_reasoning_effort')!r} is not the table's {want}")
         if t.get("model") not in MODELS_ALL:
             fail(f"{f.name}: model {t.get('model')!r} is not a gateway model")
+    roster = out / "ROSTER.md"
+    if roster.is_file() and roster_model_section() not in roster.read_text(encoding="utf-8"):
+        fail("ROSTER.md: model section is not the one MODEL_TABLE gives")
     # hooks: parses, and every command names an adapter hook or a script that is in the tree
     try:
         hj = json.loads((out / "hooks/hooks.json").read_text())

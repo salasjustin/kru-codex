@@ -71,6 +71,26 @@ grep -rEq "$model_re" "$out"; scan=$?
 check "no Claude model name is anywhere in the build" '[ "$scan" -eq 1 ]' "grep exit $scan"
 mkdir -p "$sandbox/planted"; printf 'pin claude-opus-5-5\n' > "$sandbox/planted/id"; printf 'ask Sonnet\n' > "$sandbox/planted/word"
 check "the Claude model scan finds a planted model id and a planted model word" 'grep -rEl "$model_re" "$sandbox/planted" | wc -l | grep -q "^ *2$"'
+# the built ROSTER.md's model section comes from MODEL_TABLE: one row per kind, and every seat is in
+# exactly one row, the one on its table model
+roster_models=$(awk '/^## Model tiers$/ {on=1; next} on && /^## / {exit} on' "$out/ROSTER.md")
+roster_rows=$(printf '%s\n' "$roster_models" | grep '^| ' | grep -v '^| seat kind ')
+roster_seat_is() { # <model> <seats...>: each seat is named in one row of the section, and that row is on the model
+  local m=$1 s rows; shift
+  for s in "$@"; do
+    rows=$(printf '%s\n' "$roster_rows" | grep -F "\`$s\`")
+    [ "$(printf '%s\n' "$rows" | grep -c .)" -eq 1 ] || { echo "$s is in $(printf '%s\n' "$rows" | grep -c .) rows"; return 1; }
+    printf '%s' "$rows" | grep -qF "| \`$m\` |" || { echo "$s is not on $m in ROSTER.md"; return 1; }
+  done
+}
+check "the built ROSTER.md has one model row per seat kind" '[ "$(printf "%s\n" "$roster_rows" | grep -c .)" -eq 4 ]' "$roster_rows"
+check "the built ROSTER.md names every seat with exactly its MODEL_TABLE model" 'roster_seat_is deepseek/deepseek-v4.1-flash-1017 $deep_seats && roster_seat_is minimax/minimax-m3.1-flash $ui_seats && roster_seat_is moonshotai/kimi-k3.1-pro $kimi_seats && roster_seat_is meta/muse-ember $light_seats'
+check "the built ROSTER.md lists each model'\''s accepted efforts" 'printf "%s\n" "$roster_rows" | grep -F "\`moonshotai/kimi-k3.1-pro\`" | grep -qF "| \`low\` \`high\` \`max\` |"'
+check "the built ROSTER.md names MODEL_TABLE as the source and README for prices" 'printf "%s" "$roster_models" | grep -q "MODEL_TABLE.*scripts/build-codex.sh.*README.*prices"'
+check "the built ROSTER.md drops the Claude pricing rationale" '! grep -qE "premium tier|Why full model IDs|Why pinned instead of inherit" "$out/ROSTER.md"'
+grep -Eq 'claude-(opus|sonnet|haiku|fable)' "$out/ROSTER.md"; scan=$?
+check "the built ROSTER.md holds no Claude model id" '[ "$scan" -eq 1 ]' "grep exit $scan"
+
 check "reflect and text-fix say they need a Claude Code session and stop there" 'for n in reflect text-fix; do grep -q "needs a Claude Code session" "$out/skills/$n/SKILL.md" && [ "$(wc -l < "$out/skills/$n/SKILL.md")" -lt 12 ] || exit 1; done'
 check "a shell call that ran reaches the adapter's record-read on PostToolUse" 'jq -e "[.hooks.PostToolUse[] | select(.matcher == \"Bash\") | .hooks[].command | select(test(\"codex-adapter\\\\.sh\\\" PostToolUse record-read \"))] | length == 1" "$out/hooks/hooks.json" >/dev/null'
 check "plugin-root and tool names are rewritten" '! grep -rq "CLAUDE_PLUGIN_ROOT" "$out/skills" && grep -q "<plugin-root>/references/routing.md" "$out/skills/lead/SKILL.md"'
@@ -101,6 +121,7 @@ mutate "a manual-only skill without its policy file fails the check" "skill refl
 mutate "a hook command the check cannot read fails the check" "unreadable command" 'edit "s/codex-adapter\\.sh/codex-adaptor.sh/" hooks/hooks.json'
 mutate "a hook whose script is not in the tree fails the check" "no hooks/lead-first.sh in the tree" 'rm hooks/lead-first.sh'
 mutate "a plugin-root path that resolves in the source but not in the build fails the check" "<plugin-root>/README.md exists in the source but not in the build" 'printf "%s\n" "see <plugin-root>/README.md" >> skills/lead/SKILL.md'
+mutate "a ROSTER.md model row moved off its MODEL_TABLE model fails the check" "ROSTER.md: model section is not the one MODEL_TABLE gives" 'edit "s#^\(| planning and architecture review | .*\)moonshotai/kimi-k3.1-pro#\1meta/muse-ember#" ROSTER.md'
 
 # a seat in no kind of the model table fails the build until it is placed
 src="$sandbox/src"; mkdir -p "$src"
@@ -158,6 +179,24 @@ esed '/^    LIGHT: {"minimal"/d' "$esrc/scripts/build-codex.sh"
 msg=$(bash "$esrc/scripts/build-codex.sh" "$eout" 2>&1); c=$?
 check "a model in MODEL_TABLE but not in MODEL_EFFORTS fails the build and says so" '[ "$c" -eq 1 ] && printf "%s" "$msg" | grep -q "build-codex: MODEL_EFFORTS lists"' "exit $c [$msg]"
 rm -rf "$esrc" "$eout"
+
+# a source ROSTER.md whose model-section anchors moved fails the build and names them, so the Claude
+# model table is never shipped as it is
+rsrc="$sandbox/rsrc"; mkdir -p "$rsrc"
+git -C "$root" ls-files -z | tar -C "$root" --null -T - -cf - | tar -C "$rsrc" -xf -
+rout="$sandbox/rout"
+roster_anchor_fails() { # <label> <sed edit of ROSTER.md>
+  sed "$2" "$root/ROSTER.md" > "$rsrc/ROSTER.md"
+  if cmp -s "$rsrc/ROSTER.md" "$root/ROSTER.md"; then report "$1" false "[$2] left ROSTER.md as the source has it"; return; fi
+  msg=$(bash "$rsrc/scripts/build-codex.sh" "$rout" 2>&1); c=$?
+  report "$1" "$([ "$c" -eq 1 ] && printf '%s' "$msg" | grep -qF "ROSTER.md: the model section needs one '## Model tiers' heading followed by one paragraph starting 'Fable 5 is the premium tier'" && [ ! -e "$rout" ] && echo true || echo false)" "exit $c [$msg]"
+}
+roster_anchor_fails "a source ROSTER.md without the closing paragraph fails the build and says so" 's/^Fable 5 is the premium tier/The premium tier/'
+roster_anchor_fails "a source ROSTER.md without the model heading fails the build and says so" 's/^## Model tiers$/## Models/'
+cp "$root/ROSTER.md" "$rsrc/ROSTER.md"
+bash "$rsrc/scripts/build-codex.sh" "$rout" >/dev/null 2>&1; c=$?
+check "the same copy with ROSTER.md put back builds" '[ "$c" -eq 0 ]' "exit $c"
+rm -rf "$rsrc" "$rout"
 rm -rf "$sandbox/leak"; cp -R "$out" "$sandbox/leak"
 edit 's/^model_reasoning_effort = .*/model_reasoning_effort = "minimal"/' "$sandbox/leak/roles/code-reviewer.toml"
 msg=$(bash "$build" --check "$sandbox/leak" 2>&1); c=$?
