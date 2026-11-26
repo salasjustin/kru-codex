@@ -267,8 +267,8 @@ def roster_model_section():
             "A seat's `effort:` carries over as `model_reasoning_effort`, and the build refuses one its model "
             "does not accept. The lead runs on the session's model.\n\n"
             + "\n".join(rows) + "\n\n"
-            "`MODEL_TABLE` in the kru source repository's `scripts/build-codex.sh` is the source of this "
-            "table; that repository's README, *Models* section, has the prices.\n")
+            "`MODEL_TABLE` in `scripts/build-codex.sh` of kru-codex, the repository that builds this plugin "
+            "from kru, is the source of this table; kru-codex's README has the prices in its *Models* section.\n")
 
 def roster_models(text):
     """ROSTER.md with its Claude model-pin section replaced by the MODEL_TABLE one."""
