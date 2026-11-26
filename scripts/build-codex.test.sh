@@ -201,6 +201,13 @@ else
   msg=$(bash "$rsrc/scripts/build-codex.sh" "$rout" 2>&1); c=$?
   report "a ### heading between the model anchors fails the build and says so" "$([ "$c" -eq 1 ] && printf '%s' "$msg" | grep -qF "ROSTER.md: a heading sits between '## Model tiers' and the paragraph starting 'Fable 5 is the premium tier'" && [ ! -e "$rout" ] && echo true || echo false)" "exit $c [$msg]"
 fi
+# the swap runs to the end of the closing paragraph, not its first line: a hard-wrapped tail is swapped out too
+sed 's/^Fable 5 is the premium tier.*$/&\nzz-wrapped-tail pins every seat to claude-opus-5-5./' "$root/ROSTER.md" > "$rsrc/ROSTER.md"
+if cmp -s "$rsrc/ROSTER.md" "$root/ROSTER.md"; then report "a hard-wrapped closing paragraph is swapped out whole" false "the wrap edit left ROSTER.md as the source has it"
+else
+  bash "$rsrc/scripts/build-codex.sh" "$rout" >/dev/null 2>&1; c=$?
+  check "a hard-wrapped closing paragraph is swapped out whole" '[ "$c" -eq 0 ] && ! grep -q "zz-wrapped-tail" "$rout/ROSTER.md" && ! grep -q "claude-opus" "$rout/ROSTER.md"' "exit $c"
+fi
 cp "$root/ROSTER.md" "$rsrc/ROSTER.md"
 bash "$rsrc/scripts/build-codex.sh" "$rout" >/dev/null 2>&1; c=$?
 check "the same copy with ROSTER.md put back builds" '[ "$c" -eq 0 ]' "exit $c"

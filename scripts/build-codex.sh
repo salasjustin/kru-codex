@@ -280,8 +280,9 @@ def roster_models(text):
         die(f"ROSTER.md: the model section needs one {ROSTER_MODEL_START.strip()!r} heading followed by one "
             f"paragraph starting {ROSTER_MODEL_END!r} (found {len(starts)} and {len(ends)}); "
             "update ROSTER_MODEL_START / ROSTER_MODEL_END in scripts/build-codex.sh to match ROSTER.md")
-    start, end = starts[0], text.find("\n", ends[0])
-    end = len(text) if end < 0 else end + 1
+    # the paragraph ends at the first blank line, which stays behind to keep the gap before the next heading
+    blank = re.compile(r"\n[ \t]*\n").search(text, ends[0])
+    start, end = starts[0], (blank.start() + 1 if blank else len(text))
     between = text[start + len(ROSTER_MODEL_START):ends[0]]
     if re.search(r"(?m)^#{1,6} ", between):
         die(f"ROSTER.md: a heading sits between {ROSTER_MODEL_START.strip()!r} and the paragraph starting "
