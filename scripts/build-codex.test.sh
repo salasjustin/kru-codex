@@ -113,30 +113,50 @@ check "a new seat missing from the model table fails the build" '[ "$c" -ne 0 ] 
 # role. --check holds both against the source table, and against a role it is handed as already built.
 esrc="$sandbox/esrc"; mkdir -p "$esrc"
 git -C "$root" ls-files -z | tar -C "$root" --null -T - -cf - | tar -C "$esrc" -xf -
-esed() { sed "$1" "$2" > "$2.tmp" && mv "$2.tmp" "$2"; }
+# esed fails loudly when its sed changed nothing: a pin that drifted in agents/*.md would otherwise
+# leave the source untouched and the case below it would go red for an unrelated reason
+esed() {
+  sed "$1" "$2" > "$2.tmp" && mv "$2.tmp" "$2"
+  cmp -s "$2" "$root/${2#"$esrc"/}" && { report "esed: sed matched nothing in ${2#"$esrc"/}" false "[$1] left the file as the source has it"; return 1; }
+  return 0
+}
+# each case edits one agent file; putting it back keeps every build one line away from the source
+ereset() { cp "$root/agents/$1.md" "$esrc/agents/$1.md"; }
 eout="$sandbox/efforts"
-esed 's/^effort: medium$/effort: minimal/' "$esrc/agents/dispatch-auditor.md"
+esed 's/^effort: .*$/effort: minimal/' "$esrc/agents/dispatch-auditor.md"
 bash "$esrc/scripts/build-codex.sh" "$eout" >/dev/null 2>&1; c=$?
 check "Muse Ember accepts minimal, so dispatch-auditor builds on it" '[ "$c" -eq 0 ] && grep -q "^model_reasoning_effort = \"minimal\"" "$eout/roles/dispatch-auditor.toml"' "exit $c"
-rm -rf "$eout"
-esed 's/^effort: high$/effort: minimal/' "$esrc/agents/planner.md"
+rm -rf "$eout"; ereset dispatch-auditor
+esed 's/^effort: .*$/effort: minimal/' "$esrc/agents/planner.md"
 msg=$(bash "$esrc/scripts/build-codex.sh" "$eout" 2>&1); c=$?
 check "an unsupported effort pin fails the build and names the model's set" '[ "$c" -eq 1 ] && printf "%s" "$msg" | grep -q "agents/planner.md: effort '\''minimal'\'' is not one moonshotai/kimi-k3.1-pro accepts (high, low, max)"' "exit $c [$msg]"
 check "a failed build leaves no tree" '[ ! -e "$eout" ]'
-esed 's/^effort: minimal$/effort: max/' "$esrc/agents/planner.md"
+ereset planner
+esed 's/^effort: .*$/effort: max/' "$esrc/agents/planner.md"
 bash "$esrc/scripts/build-codex.sh" "$eout" >/dev/null 2>&1; c=$?
 check "the same seat takes an effort Kimi does accept, and keeps it" '[ "$c" -eq 0 ] && grep -q "^model_reasoning_effort = \"max\"" "$eout/roles/planner.toml"' "exit $c"
-rm -rf "$eout"
-esed 's/^effort: high$/effort: none/' "$esrc/agents/code-reviewer.md"
+rm -rf "$eout"; ereset planner
+esed 's/^effort: .*$/effort: none/' "$esrc/agents/code-reviewer.md"
 msg=$(bash "$esrc/scripts/build-codex.sh" "$eout" 2>&1); c=$?
 check "MiniMax has no none, so a none pin there fails the build" '[ "$c" -eq 1 ] && printf "%s" "$msg" | grep -q "is not one minimax/minimax-m3.1-flash accepts" ' "exit $c [$msg]"
-esed 's/^effort: none$/effort: xhigh/' "$esrc/agents/code-reviewer.md"
+ereset code-reviewer
+esed 's/^effort: .*$/effort: xhigh/' "$esrc/agents/code-reviewer.md"
 bash "$esrc/scripts/build-codex.sh" "$eout" >/dev/null 2>&1; c=$?
 check "MiniMax does accept xhigh, and keeps it" '[ "$c" -eq 0 ] && grep -q "^model_reasoning_effort = \"xhigh\"" "$eout/roles/code-reviewer.toml"' "exit $c"
-rm -rf "$eout"
-esed 's/^model: claude-opus-5-5$/model: claude-opus-5-5\neffort: none/' "$esrc/agents/stripe-specialist.md"
+rm -rf "$eout"; ereset code-reviewer
+esed 's/^model: .*$/&\neffort: none/' "$esrc/agents/stripe-specialist.md"
 bash "$esrc/scripts/build-codex.sh" "$eout" >/dev/null 2>&1; c=$?
 check "an explicit none on DeepSeek builds and is kept" '[ "$c" -eq 0 ] && grep -q "^model_reasoning_effort = \"none\"" "$eout/roles/stripe-specialist.toml"' "exit $c"
+rm -rf "$eout"; ereset stripe-specialist
+# the seat's kind picks its model: a different Claude id in its model: row changes nothing
+esed 's/^model: .*$/model: claude-haiku-5-5/' "$esrc/agents/stripe-specialist.md"
+bash "$esrc/scripts/build-codex.sh" "$eout" >/dev/null 2>&1; c=$?
+check "a seat's Claude model pin does not pick its model" '[ "$c" -eq 0 ] && grep -q "^model = \"deepseek/deepseek-v4.1-flash-1017\"" "$eout/roles/stripe-specialist.toml"' "exit $c"
+rm -rf "$eout"; ereset stripe-specialist
+# a model dropped from MODEL_EFFORTS no longer matches the table: the build names both and exits 1
+esed '/^    LIGHT: {"minimal"/d' "$esrc/scripts/build-codex.sh"
+msg=$(bash "$esrc/scripts/build-codex.sh" "$eout" 2>&1); c=$?
+check "a model in MODEL_TABLE but not in MODEL_EFFORTS fails the build and says so" '[ "$c" -eq 1 ] && printf "%s" "$msg" | grep -q "build-codex: MODEL_EFFORTS lists"' "exit $c [$msg]"
 rm -rf "$esrc" "$eout"
 rm -rf "$sandbox/leak"; cp -R "$out" "$sandbox/leak"
 edit 's/^model_reasoning_effort = .*/model_reasoning_effort = "minimal"/' "$sandbox/leak/roles/code-reviewer.toml"
