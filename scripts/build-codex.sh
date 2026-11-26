@@ -72,8 +72,10 @@ NESTED_PASS = {"reflect", "text-fix"}
 NESTED_BODY = ("\n**This pass needs a Claude Code session.** It starts a nested `claude -p` session, and a "
                "Codex session has no Claude login, so it cannot run here. Say that in one line and stop. "
                "Do not attempt the nested call.\n")
-# a Claude model name never reaches the output: ids become the gateway model of the same tier, and a
-# model's display name (Opus, Sonnet, Haiku, Fable, with or without a version) becomes "a model"
+# a Claude model name never reaches the output: ROSTER.md's model section is regenerated from
+# MODEL_TABLE (roster_models); elsewhere an id becomes the gateway model DOC_TIER_MODEL fixes for its
+# family, and a model's display name (Opus, Sonnet, Haiku, Fable, with or without a version) becomes
+# "a model"
 CLAUDE_MODEL_ID = re.compile(r"claude-(opus|sonnet|haiku)-[0-9][0-9.-]*")
 CLAUDE_MODEL_NAME = re.compile(r"\b(?:Claude )?(?:Opus|Sonnet|Haiku|Fable)(?: [0-9]+(?:\.[0-9]+)*)?\b")
 CLAUDE_MODEL_LEFT = re.compile(r"claude-(?:opus|sonnet|haiku|fable)|\b(?:Opus|Sonnet|Haiku|Fable)\b")
@@ -83,32 +85,53 @@ ROOT_NOTE = ("`<plugin-root>` below is the kru plugin directory: the one that ho
 # a seat whose description says it reports and does not edit gets a read-only sandbox
 READ_ONLY_SEAT = re.compile(r"\b(does not edit|no edits)\b|Reports only")
 
-# the model per seat. A Codex session runs on these models only, never a Claude one. A seat takes the
-# model of its kind and, within the kind, of the tier its Claude `model:` pin names ("*" is any tier).
-# Its `effort:` carries over unchanged as `model_reasoning_effort`. Every seat is listed once: a seat in
-# no kind, in two, or a name with no seat file fails the build until the table is fixed.
-OPUS, SONNET, HAIKU = "opus", "sonnet", "haiku"
+# the model per seat. A Codex session runs on these models only, never a Claude one, and every seat
+# takes the one model of its kind ("*" is the only key: a seat's Claude `model:` pin is upstream
+# metadata and picks nothing). Its `effort:` carries over unchanged as
+# `model_reasoning_effort`, and MODEL_EFFORTS must list that effort for that model or the build fails.
+# Every seat is listed once: a seat in no kind, in two, or a name with no seat file fails the build
+# until the table is fixed.
+DEEP = "deepseek/deepseek-v4.1-flash-1017"
+UI = "minimax/minimax-m3.1-flash"
+KIMI = "moonshotai/kimi-k3.1-pro"
+LIGHT = "meta/muse-ember"
 MODEL_TABLE = [
-    # kind       seats                                                                        model by tier
-    ("ui", ["react-ui-builder", "svelte-ui-builder", "hono-ui-builder", "web-components-builder",
-            "extension-builder", "motion-designer", "conversion-copywriter", "ux-auditor",
-            "visual-reviewer", "accessibility-reviewer"],
-     {OPUS: "moonshotai/kimi-k3.1-pro", SONNET: "moonshotai/kimi-k3"}),
-    ("independent reviewer", ["code-reviewer", "architecture-reviewer"],
-     {"*": "openai/gpt-6.2-sol"}),
-    ("other", ["better-auth-specialist", "chariot-specialist", "cloudflare-builder", "dispatch-auditor",
-               "express-builder", "fly-platform-engineer", "go-fullstack-builder", "hono-builder",
-               "nextjs-builder", "node-developer", "nowpayments-specialist", "paypal-specialist",
-               "planner", "postgres-architect", "python-developer", "quickbooks-specialist",
-               "react-router-builder", "sanity-builder", "sqlite-architect", "stripe-specialist",
-               "sveltekit-builder", "tanstack-start-builder", "test-writer", "toolchain-engineer",
-               "turso-specialist", "vercel-perf-optimizer", "vercel-platform-engineer",
-               "zapier-specialist", "zig-developer"],
-     {OPUS: "zai/glm-5.3", SONNET: "zai/glm-5.3-flash", HAIKU: "zai/glm-5.3-flash"}),
+    # kind       seats                                                                        model
+    ("Deep engineering", ["better-auth-specialist", "chariot-specialist", "cloudflare-builder",
+                          "express-builder", "fly-platform-engineer", "go-fullstack-builder", "hono-builder",
+                          "nextjs-builder", "node-developer", "nowpayments-specialist", "paypal-specialist",
+                          "postgres-architect", "python-developer", "quickbooks-specialist",
+                          "react-router-builder", "sanity-builder", "sqlite-architect", "stripe-specialist",
+                          "sveltekit-builder", "tanstack-start-builder", "turso-specialist",
+                          "vercel-platform-engineer", "zapier-specialist", "zig-developer"],
+     {"*": DEEP}),
+    ("UI, tests and the code reviewer", ["react-ui-builder", "svelte-ui-builder", "hono-ui-builder",
+                                         "web-components-builder", "extension-builder", "motion-designer",
+                                         "test-writer", "code-reviewer"],
+     {"*": UI}),
+    ("Planning and architecture review", ["planner", "architecture-reviewer"],
+     {"*": KIMI}),
+    ("Visual review and lighter repeated work", ["conversion-copywriter", "ux-auditor", "visual-reviewer",
+                                                 "accessibility-reviewer", "dispatch-auditor",
+                                                 "toolchain-engineer", "vercel-perf-optimizer"],
+     {"*": LIGHT}),
 ]
-# available and assigned to no seat kind
-UNASSIGNED_MODELS = ["deepseek/deepseek-v4.1-flash"]
-MODELS_ALL = {m for _, _, by_tier in MODEL_TABLE for m in by_tier.values()} | set(UNASSIGNED_MODELS)
+MODELS_ALL = {m for _, _, by_tier in MODEL_TABLE for m in by_tier.values()}
+# the reasoning efforts each gateway model accepts, from its `reasoning_options` in the public model
+# list (https://ai-gateway.vercel.sh/v1/models, reviewed 2026-11-26). the gateway rejects
+# a request with a pin outside this set, so the build refuses the pin rather than ship it.
+MODEL_EFFORTS = {
+    DEEP: {"none", "low", "high", "max"},
+    UI: {"low", "medium", "high", "xhigh", "max"},
+    KIMI: {"low", "high", "max"},
+    LIGHT: {"minimal", "low", "medium", "high", "xhigh", "max"},
+}
+
+def effort_problem(seat, model, effort):
+    """a line when the seat's effort pin is not one its model accepts, else None."""
+    if effort and model in MODEL_EFFORTS and effort not in MODEL_EFFORTS[model]:
+        return f"agents/{seat}.md: effort {effort!r} is not one {model} accepts ({', '.join(sorted(MODEL_EFFORTS[model]))})"
+    return None
 
 def table_problems():
     """what is wrong with the table against the seat files, one line each."""
@@ -120,15 +143,17 @@ def table_problems():
     return bad
 
 def seat_model(seat, fm):
-    """(model, reasoning effort or None) for a seat, from its kind, its Claude Code pin and its effort."""
-    m = re.search(r"opus|sonnet|haiku", fm.get("model", ""))
-    tier = m.group(0) if m else None
+    """(model, reasoning effort or None) for a seat, from its kind and its effort."""
     for kind, names, by_tier in MODEL_TABLE:
         if seat in names:
-            model = by_tier.get(tier) or by_tier.get("*")
+            model = by_tier.get("*")
             if not model:
-                die(f"agents/{seat}.md: kind {kind!r} of MODEL_TABLE has no model for tier {tier!r}")
-            return model, fm.get("effort") or None
+                die(f"agents/{seat}.md: kind {kind!r} of MODEL_TABLE has no model for any tier")
+            effort = fm.get("effort") or None
+            problem = effort_problem(seat, model, effort)
+            if problem:
+                die(problem)
+            return model, effort
     die(f"agents/{seat}.md is in no seat kind of MODEL_TABLE")
 
 # the Codex build's hooks, as (event, matcher, hook, script args, timeout in s). each runs through
@@ -164,6 +189,9 @@ ADAPTER_HOOKS = ("record-prompt", "record-read")
 def die(msg):
     print(f"build-codex: {msg}", file=sys.stderr)
     sys.exit(1)
+
+if MODELS_ALL != set(MODEL_EFFORTS):
+    die(f"MODEL_EFFORTS lists {sorted(MODEL_EFFORTS)} but MODEL_TABLE assigns {sorted(MODELS_ALL)}")
 
 def split_fm(text, where):
     if not text.startswith("---\n"):
@@ -212,11 +240,58 @@ def one_line(s):
 def rewrite_root(text, root):
     return text.replace("${CLAUDE_PLUGIN_ROOT}", root).replace("$CLAUDE_PLUGIN_ROOT", root)
 
-# a Claude model id in a document becomes the model its tier takes for most seats
-DOC_TIER_MODEL = {OPUS: "zai/glm-5.3", SONNET: "zai/glm-5.3-flash", HAIKU: "zai/glm-5.3-flash"}
+# a Claude model id in a document becomes the gateway model fixed here for its family, whatever
+# model the seats pinned to that id run on
+OPUS, SONNET, HAIKU = "opus", "sonnet", "haiku"
+DOC_TIER_MODEL = {OPUS: DEEP, SONNET: UI, HAIKU: LIGHT}
 
 def tier_model(tier):
     return DOC_TIER_MODEL[tier]
+
+# ROSTER.md's model section pins seats to Claude ids by Claude tier, which is not how this build picks
+# a seat's model. the build swaps it, from its heading through the closing "Fable 5 is the premium
+# tier" paragraph, for a table drawn from MODEL_TABLE. both anchors must be found, once each, in order
+# and with no heading between them, or the build stops: an upstream edit that moves them would
+# otherwise ship the Claude table
+ROSTER_MODEL_START = "## Model tiers\n"
+ROSTER_MODEL_END = "Fable 5 is the premium tier"
+EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+def roster_model_section():
+    rows = ["| seat kind | seats | model | efforts accepted |", "|---|---|---|---|"]
+    for kind, names, by_tier in MODEL_TABLE:
+        model = by_tier["*"]
+        seats = ", ".join(f"`{s}`" for s in names)
+        efforts = " ".join(f"`{e}`" for e in sorted(MODEL_EFFORTS[model], key=lambda e: (EFFORT_ORDER.index(e) if e in EFFORT_ORDER else len(EFFORT_ORDER), e)))
+        rows.append(f"| {kind} | {seats} | `{model}` | {efforts} |")
+    return (ROSTER_MODEL_START + "\n"
+            "In this build every seat runs on the one gateway model of its seat kind, never a Claude model. "
+            "A seat's `effort:` carries over as `model_reasoning_effort`, and the build refuses one its model "
+            "does not accept. The lead runs on the session's model.\n\n"
+            + "\n".join(rows) + "\n\n"
+            "`MODEL_TABLE` in `scripts/build-codex.sh` of kru-codex, the repository that builds this plugin "
+            "from kru, is the source of this table; kru-codex's README has the prices in its *Models* section.\n")
+
+def roster_models(text):
+    """ROSTER.md with its Claude model-pin section replaced by the MODEL_TABLE one."""
+    starts = [m.start() for m in re.finditer(r"(?m)^" + re.escape(ROSTER_MODEL_START), text)]
+    ends = [m.start() for m in re.finditer(r"(?m)^" + re.escape(ROSTER_MODEL_END), text)]
+    if len(starts) != 1 or len(ends) != 1 or ends[0] < starts[0]:
+        die(f"ROSTER.md: the model section needs one {ROSTER_MODEL_START.strip()!r} heading followed by one "
+            f"paragraph starting {ROSTER_MODEL_END!r} (found {len(starts)} and {len(ends)}); "
+            "update ROSTER_MODEL_START / ROSTER_MODEL_END in scripts/build-codex.sh to match ROSTER.md")
+    # the paragraph ends at the first blank line, which stays behind to keep the gap before the next heading
+    blank = re.compile(r"\n[ \t]*\n").search(text, ends[0])
+    start, end = starts[0], (blank.start() + 1 if blank else len(text))
+    between = text[start + len(ROSTER_MODEL_START):ends[0]]
+    if re.search(r"(?m)^#{1,6} ", between):
+        die(f"ROSTER.md: a heading sits between {ROSTER_MODEL_START.strip()!r} and the paragraph starting "
+            f"{ROSTER_MODEL_END!r}; the model section would swallow it. update ROSTER_MODEL_START / "
+            "ROSTER_MODEL_END in scripts/build-codex.sh to match ROSTER.md")
+    return text[:start] + roster_model_section() + text[end:]
+
+# source documents the build changes before the rules apply, by path
+DOC_TRANSFORMS = {"ROSTER.md": roster_models}
 
 def rewrite_models(text):
     text = CLAUDE_MODEL_ID.sub(lambda m: tier_model(m.group(1)), text)
@@ -259,6 +334,8 @@ def copy_file(src, dst, root, rel, md_rules=True):
     dst.parent.mkdir(parents=True, exist_ok=True)
     if is_text(src):
         text = src.read_text(encoding="utf-8")
+        if rel in DOC_TRANSFORMS:
+            text = DOC_TRANSFORMS[rel](text)
         text = rewrite(text, root, rel) if md_rules and src.suffix == ".md" else rewrite_root(text, root)
         if root == ROOT_TOKEN and src.suffix == ".md" and ROOT_TOKEN in text and "install dir" not in text:
             text = prepend_note(text, ROOT_NOTE)
@@ -513,11 +590,18 @@ def check(out):
             fail(f"{f.name}: needs name = file name, a description and developer_instructions")
         src = REPO / "agents" / f"{f.stem}.md"
         if src.is_file():
-            want = seat_model(f.stem, parse_fm(split_fm(src.read_text(encoding="utf-8"), f.stem)[0]))
-            if (t.get("model"), t.get("model_reasoning_effort")) != want:
+            fm = parse_fm(split_fm(src.read_text(encoding="utf-8"), f.stem)[0])
+            want = seat_model(f.stem, fm)
+            problem = effort_problem(f.stem, t.get("model"), t.get("model_reasoning_effort"))
+            if problem:
+                fail(f"{f.name}: {problem}")
+            elif (t.get("model"), t.get("model_reasoning_effort")) != want:
                 fail(f"{f.name}: model {t.get('model')!r} / effort {t.get('model_reasoning_effort')!r} is not the table's {want}")
         if t.get("model") not in MODELS_ALL:
             fail(f"{f.name}: model {t.get('model')!r} is not a gateway model")
+    roster = out / "ROSTER.md"
+    if roster.is_file() and roster_model_section() not in roster.read_text(encoding="utf-8"):
+        fail("ROSTER.md: model section is not the one MODEL_TABLE gives")
     # hooks: parses, and every command names an adapter hook or a script that is in the tree
     try:
         hj = json.loads((out / "hooks/hooks.json").read_text())

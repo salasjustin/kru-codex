@@ -44,15 +44,16 @@ bash scripts/verify.sh                               # every check, the Codex bu
 
 ## Models
 
-Every seat runs on a model routed through AI Gateway, never a Claude model. The seat kind picks the model family, and the seat's size in kru picks the model within it:
+Every seat runs on one of four models routed through AI Gateway, never a Claude model. `MODEL_TABLE` in `scripts/build-codex.sh` is the assignment source: four seat kinds, each on one model, and a new seat from upstream fails the build until it has a place in the table.
 
-| Seats | Model |
-|---|---|
-| UI: the UI builders, extension, motion, copy, UX, visual and accessibility reviewers | `moonshotai/kimi-k3.1-pro`, or `moonshotai/kimi-k3` for the lighter ones |
-| The two independent reviewers: `code-reviewer`, `architecture-reviewer` | `openai/gpt-6.2-sol` |
-| Every other seat | `zai/glm-5.3`, or `zai/glm-5.3-flash` for the lighter ones |
+| group | seats | model | price, USD per 1M in / out | efforts accepted |
+|---|---|---|---|---|
+| Deep engineering | 24: auth, payments, accounting, data, platform and long-horizon builders | `deepseek/deepseek-v4.1-flash-1017` | `$0.30` / `$1.20` | `none low high max` |
+| UI, tests and the code reviewer | 8 | `minimax/minimax-m3.1-flash` | `$0.15` / `$0.60` | `low medium high xhigh max` |
+| Planning and architecture review | 2: `planner`, `architecture-reviewer` | `moonshotai/kimi-k3.1-pro` | `$2` / `$10` | `low high max` |
+| Visual review and lighter repeated work | 7: `conversion-copywriter`, `ux-auditor`, `visual-reviewer`, `accessibility-reviewer`, `dispatch-auditor`, `toolchain-engineer`, `vercel-perf-optimizer` | `meta/muse-ember` | `$0.10` / `$0.50` | `minimal low medium high xhigh max` |
 
-The table is `MODEL_TABLE` in `scripts/build-codex.sh`. A new seat from upstream fails the build until it has a place in the table.
+A seat's `effort:` carries over as `model_reasoning_effort`; the build refuses a pin its model does not accept. Prices and supported efforts are from the Gateway catalog as of Nov 26, 2026. The choice and its evidence: `codex/PORTING.md` → *Models*.
 
 ## What is missing
 
