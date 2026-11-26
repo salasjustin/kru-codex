@@ -72,8 +72,9 @@ NESTED_PASS = {"reflect", "text-fix"}
 NESTED_BODY = ("\n**This pass needs a Claude Code session.** It starts a nested `claude -p` session, and a "
                "Codex session has no Claude login, so it cannot run here. Say that in one line and stop. "
                "Do not attempt the nested call.\n")
-# a Claude model name never reaches the output: ids become the gateway model of the same tier, and a
-# model's display name (Opus, Sonnet, Haiku, Fable, with or without a version) becomes "a model"
+# a Claude model name never reaches the output: an id becomes the gateway model DOC_TIER_MODEL fixes
+# for its family, and a model's display name (Opus, Sonnet, Haiku, Fable, with or without a version)
+# becomes "a model"
 CLAUDE_MODEL_ID = re.compile(r"claude-(opus|sonnet|haiku)-[0-9][0-9.-]*")
 CLAUDE_MODEL_NAME = re.compile(r"\b(?:Claude )?(?:Opus|Sonnet|Haiku|Fable)(?: [0-9]+(?:\.[0-9]+)*)?\b")
 CLAUDE_MODEL_LEFT = re.compile(r"claude-(?:opus|sonnet|haiku|fable)|\b(?:Opus|Sonnet|Haiku|Fable)\b")
@@ -124,8 +125,6 @@ MODEL_EFFORTS = {
     KIMI: {"low", "high", "max"},
     LIGHT: {"minimal", "low", "medium", "high", "xhigh", "max"},
 }
-if MODELS_ALL != set(MODEL_EFFORTS):
-    die(f"MODEL_EFFORTS lists {sorted(MODEL_EFFORTS)} but MODEL_TABLE assigns {sorted(MODELS_ALL)}")
 
 def effort_problem(seat, model, effort):
     """a line when the seat's effort pin is not one its model accepts, else None."""
@@ -190,6 +189,9 @@ def die(msg):
     print(f"build-codex: {msg}", file=sys.stderr)
     sys.exit(1)
 
+if MODELS_ALL != set(MODEL_EFFORTS):
+    die(f"MODEL_EFFORTS lists {sorted(MODEL_EFFORTS)} but MODEL_TABLE assigns {sorted(MODELS_ALL)}")
+
 def split_fm(text, where):
     if not text.startswith("---\n"):
         die(f"{where}: no frontmatter")
@@ -237,7 +239,8 @@ def one_line(s):
 def rewrite_root(text, root):
     return text.replace("${CLAUDE_PLUGIN_ROOT}", root).replace("$CLAUDE_PLUGIN_ROOT", root)
 
-# a Claude model id in a document becomes the model its tier takes for most seats
+# a Claude model id in a document becomes the gateway model fixed here for its family, whatever
+# model the seats pinned to that id run on
 OPUS, SONNET, HAIKU = "opus", "sonnet", "haiku"
 DOC_TIER_MODEL = {OPUS: DEEP, SONNET: UI, HAIKU: LIGHT}
 

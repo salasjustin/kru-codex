@@ -48,7 +48,7 @@ Every seat runs on one of four models routed through AI Gateway, never a Claude 
 
 | group | seats | model | price, USD per 1M in / out | efforts accepted |
 |---|---|---|---|---|
-| Deep engineering | 24: auth, payments, data, platforms, long-horizon builders | `deepseek/deepseek-v4.1-flash-1017` | `$0.30` / `$1.20` | `none low high max` |
+| Deep engineering | 24: auth, payments, accounting, data, platform and long-horizon builders | `deepseek/deepseek-v4.1-flash-1017` | `$0.30` / `$1.20` | `none low high max` |
 | UI, tests and the code reviewer | 8 | `minimax/minimax-m3.1-flash` | `$0.15` / `$0.60` | `low medium high xhigh max` |
 | Planning and architecture review | 2: `planner`, `architecture-reviewer` | `moonshotai/kimi-k3.1-pro` | `$2` / `$10` | `low high max` |
 | Visual review and lighter repeated work | 7: `conversion-copywriter`, `ux-auditor`, `visual-reviewer`, `accessibility-reviewer`, `dispatch-auditor`, `toolchain-engineer`, `vercel-perf-optimizer` | `meta/muse-ember` | `$0.10` / `$0.50` | `minimal low medium high xhigh max` |
