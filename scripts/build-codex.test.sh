@@ -34,7 +34,7 @@ check "every seat is a role" '[ "$(ls "$out/roles" | wc -l | tr -d " ")" = "$(ls
 check "a reviewer is read-only and a builder is not" 'grep -q "^sandbox_mode = \"read-only\"" "$out/roles/code-reviewer.toml" && ! grep -q "^sandbox_mode" "$out/roles/react-ui-builder.toml"'
 model_is() { grep -q "^model = \"$2\"" "$out/roles/$1.toml"; }
 effort_is() { if [ -z "$2" ]; then ! grep -q "^model_reasoning_effort" "$out/roles/$1.toml"; else grep -q "^model_reasoning_effort = \"$2\"" "$out/roles/$1.toml"; fi; }
-# the four value tiers, by the brief's exact seat lists
+# the four seat kinds of MODEL_TABLE, seat by seat
 deep_seats="better-auth-specialist chariot-specialist cloudflare-builder express-builder fly-platform-engineer go-fullstack-builder hono-builder nextjs-builder node-developer nowpayments-specialist paypal-specialist postgres-architect python-developer quickbooks-specialist react-router-builder sanity-builder sqlite-architect stripe-specialist sveltekit-builder tanstack-start-builder turso-specialist vercel-platform-engineer zapier-specialist zig-developer"
 ui_seats="react-ui-builder svelte-ui-builder hono-ui-builder web-components-builder extension-builder motion-designer test-writer code-reviewer"
 kimi_seats="planner architecture-reviewer"
@@ -56,8 +56,9 @@ alloc="$(printf '%s %s %s %s' "$deep_seats" "$ui_seats" "$kimi_seats" "$light_se
 bad_count=$(printf '%s\n' "$alloc" | sort | uniq -d | wc -l | tr -d ' ')
 check "all 41 current seats are in the four lists exactly once" '[ "$(printf "%s\n" "$alloc" | grep -c .)" -eq 41 ] && [ "$bad_count" = 0 ] && [ "$(ls "$root/agents"/*.md | xargs -n1 basename | sed "s/\.md$//" | sort | tr "\n" " ")" = "$(printf "%s\n" "$alloc" | sort | tr "\n" " ")" ]'
 check "every role is on one of the four models, and every model is used" '[ "$(grep -h "^model = " "$out"/roles/*.toml | sort -u | tr "\n" " ")" = "$(printf "%s\n" "model = \"deepseek/deepseek-v4.1-flash-1017\"" "model = \"meta/muse-ember\"" "model = \"minimax/minimax-m3.1-flash\"" "model = \"moonshotai/kimi-k3.1-pro\"" | sort | tr "\n" " ")" ]'
-# K3 itself, GLM, GPT-Sol and Anthropic ids. The K3 rule matches 'moonshotai/kimi-k3' followed by the
-# closing quote or end of line, never 'kimi-k3.1-pro', and a planted pin keeps the pattern honest
+# the replaced Kimi K3, GLM and GPT-Sol ids, and Anthropic ones. The K3 rule matches
+# 'moonshotai/kimi-k3' followed by the closing quote or end of line, never 'kimi-k3.1-pro', and a
+# planted pin keeps the pattern honest
 old_re='moonshotai/kimi-k3"|moonshotai/kimi-k3$|zai/glm|openai/gpt-6.2-sol|anthropic/|claude-(opus|sonnet|haiku|fable)'
 grep -rh "^model = " "$out"/roles | grep -Eq "$old_re"; scan=$?
 check "no old or Anthropic model id remains in generated roles" '[ "$scan" -eq 1 ]' "grep exit $scan"
@@ -121,7 +122,7 @@ mutate "a manual-only skill without its policy file fails the check" "skill refl
 mutate "a hook command the check cannot read fails the check" "unreadable command" 'edit "s/codex-adapter\\.sh/codex-adaptor.sh/" hooks/hooks.json'
 mutate "a hook whose script is not in the tree fails the check" "no hooks/lead-first.sh in the tree" 'rm hooks/lead-first.sh'
 mutate "a plugin-root path that resolves in the source but not in the build fails the check" "<plugin-root>/README.md exists in the source but not in the build" 'printf "%s\n" "see <plugin-root>/README.md" >> skills/lead/SKILL.md'
-mutate "a ROSTER.md model row moved off its MODEL_TABLE model fails the check" "ROSTER.md: model section is not the one MODEL_TABLE gives" 'edit "s#^\(| planning and architecture review | .*\)moonshotai/kimi-k3.1-pro#\1meta/muse-ember#" ROSTER.md'
+mutate "a ROSTER.md model row moved off its MODEL_TABLE model fails the check" "ROSTER.md: model section is not the one MODEL_TABLE gives" 'edit "s#^\(| Planning and architecture review | .*\)moonshotai/kimi-k3.1-pro#\1meta/muse-ember#" ROSTER.md'
 
 # a seat in no kind of the model table fails the build until it is placed
 src="$sandbox/src"; mkdir -p "$src"

@@ -53,7 +53,7 @@ Every seat runs on one of four models routed through AI Gateway, never a Claude 
 | Planning and architecture review | 2: `planner`, `architecture-reviewer` | `moonshotai/kimi-k3.1-pro` | `$2` / `$10` | `low high max` |
 | Visual review and lighter repeated work | 7: `conversion-copywriter`, `ux-auditor`, `visual-reviewer`, `accessibility-reviewer`, `dispatch-auditor`, `toolchain-engineer`, `vercel-perf-optimizer` | `meta/muse-ember` | `$0.10` / `$0.50` | `minimal low medium high xhigh max` |
 
-A seat's `effort:` carries over as `model_reasoning_effort`; the build refuses a pin its model does not accept. Prices and supported efforts are the Gateway catalog on Nov 26, 2026. The choice and its evidence: `codex/PORTING.md` → *Models*.
+A seat's `effort:` carries over as `model_reasoning_effort`; the build refuses a pin its model does not accept. Prices and supported efforts are from the Gateway catalog as of Nov 26, 2026. The choice and its evidence: `codex/PORTING.md` → *Models*.
 
 ## What is missing
 

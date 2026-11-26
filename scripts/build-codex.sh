@@ -73,8 +73,9 @@ NESTED_BODY = ("\n**This pass needs a Claude Code session.** It starts a nested 
                "Codex session has no Claude login, so it cannot run here. Say that in one line and stop. "
                "Do not attempt the nested call.\n")
 # a Claude model name never reaches the output: ROSTER.md's model section is regenerated from
-# MODEL_TABLE (roster_models), elsewhere an id becomes the gateway model DOC_TIER_MODEL fixes for its family, and a model's display name (Opus, Sonnet, Haiku, Fable, with or without a version)
-# becomes "a model"
+# MODEL_TABLE (roster_models); elsewhere an id becomes the gateway model DOC_TIER_MODEL fixes for its
+# family, and a model's display name (Opus, Sonnet, Haiku, Fable, with or without a version) becomes
+# "a model"
 CLAUDE_MODEL_ID = re.compile(r"claude-(opus|sonnet|haiku)-[0-9][0-9.-]*")
 CLAUDE_MODEL_NAME = re.compile(r"\b(?:Claude )?(?:Opus|Sonnet|Haiku|Fable)(?: [0-9]+(?:\.[0-9]+)*)?\b")
 CLAUDE_MODEL_LEFT = re.compile(r"claude-(?:opus|sonnet|haiku|fable)|\b(?:Opus|Sonnet|Haiku|Fable)\b")
@@ -85,8 +86,8 @@ ROOT_NOTE = ("`<plugin-root>` below is the kru plugin directory: the one that ho
 READ_ONLY_SEAT = re.compile(r"\b(does not edit|no edits)\b|Reports only")
 
 # the model per seat. A Codex session runs on these models only, never a Claude one, and every seat
-# takes the one model of its kind ("*": no tier lookup; a seat's Claude `model:` row is upstream
-# metadata and no longer picks anything). Its `effort:` carries over unchanged as
+# takes the one model of its kind ("*" is the only key: a seat's Claude `model:` pin is upstream
+# metadata and picks nothing). Its `effort:` carries over unchanged as
 # `model_reasoning_effort`, and MODEL_EFFORTS must list that effort for that model or the build fails.
 # Every seat is listed once: a seat in no kind, in two, or a name with no seat file fails the build
 # until the table is fixed.
@@ -96,7 +97,7 @@ KIMI = "moonshotai/kimi-k3.1-pro"
 LIGHT = "meta/muse-ember"
 MODEL_TABLE = [
     # kind       seats                                                                        model
-    ("deep engineering", ["better-auth-specialist", "chariot-specialist", "cloudflare-builder",
+    ("Deep engineering", ["better-auth-specialist", "chariot-specialist", "cloudflare-builder",
                           "express-builder", "fly-platform-engineer", "go-fullstack-builder", "hono-builder",
                           "nextjs-builder", "node-developer", "nowpayments-specialist", "paypal-specialist",
                           "postgres-architect", "python-developer", "quickbooks-specialist",
@@ -104,21 +105,21 @@ MODEL_TABLE = [
                           "sveltekit-builder", "tanstack-start-builder", "turso-specialist",
                           "vercel-platform-engineer", "zapier-specialist", "zig-developer"],
      {"*": DEEP}),
-    ("ui, test and independent reviewer", ["react-ui-builder", "svelte-ui-builder", "hono-ui-builder",
-                                           "web-components-builder", "extension-builder", "motion-designer",
-                                           "test-writer", "code-reviewer"],
+    ("UI, tests and the code reviewer", ["react-ui-builder", "svelte-ui-builder", "hono-ui-builder",
+                                         "web-components-builder", "extension-builder", "motion-designer",
+                                         "test-writer", "code-reviewer"],
      {"*": UI}),
-    ("planning and architecture review", ["planner", "architecture-reviewer"],
+    ("Planning and architecture review", ["planner", "architecture-reviewer"],
      {"*": KIMI}),
-    ("visual review and lighter repeated work", ["conversion-copywriter", "ux-auditor", "visual-reviewer",
+    ("Visual review and lighter repeated work", ["conversion-copywriter", "ux-auditor", "visual-reviewer",
                                                  "accessibility-reviewer", "dispatch-auditor",
                                                  "toolchain-engineer", "vercel-perf-optimizer"],
      {"*": LIGHT}),
 ]
 MODELS_ALL = {m for _, _, by_tier in MODEL_TABLE for m in by_tier.values()}
 # the reasoning efforts each gateway model accepts, from its `reasoning_options` in the public model
-# list (https://ai-gateway.vercel.sh/v1/models, reviewed 2026-11-26). a pin outside this set has no
-# request the gateway would take, so the build refuses it rather than ship it.
+# list (https://ai-gateway.vercel.sh/v1/models, reviewed 2026-11-26). the gateway rejects
+# a request with a pin outside this set, so the build refuses the pin rather than ship it.
 MODEL_EFFORTS = {
     DEEP: {"none", "low", "high", "max"},
     UI: {"low", "medium", "high", "xhigh", "max"},
@@ -249,8 +250,9 @@ def tier_model(tier):
 
 # ROSTER.md's model section pins seats to Claude ids by Claude tier, which is not how this build picks
 # a seat's model. the build swaps it, from its heading through the closing "Fable 5 is the premium
-# tier" paragraph, for a table drawn from MODEL_TABLE. both anchors must be found, once each and in
-# order, or the build stops: an upstream edit that moves them would otherwise ship the Claude table
+# tier" paragraph, for a table drawn from MODEL_TABLE. both anchors must be found, once each, in order
+# and with no heading between them, or the build stops: an upstream edit that moves them would
+# otherwise ship the Claude table
 ROSTER_MODEL_START = "## Model tiers\n"
 ROSTER_MODEL_END = "Fable 5 is the premium tier"
 EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
