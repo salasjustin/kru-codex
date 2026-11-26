@@ -283,7 +283,7 @@ def roster_models(text):
     start, end = starts[0], text.find("\n", ends[0])
     end = len(text) if end < 0 else end + 1
     between = text[start + len(ROSTER_MODEL_START):ends[0]]
-    if re.search(r"(?m)^#{1,2} ", between):
+    if re.search(r"(?m)^#{1,6} ", between):
         die(f"ROSTER.md: a heading sits between {ROSTER_MODEL_START.strip()!r} and the paragraph starting "
             f"{ROSTER_MODEL_END!r}; the model section would swallow it. update ROSTER_MODEL_START / "
             "ROSTER_MODEL_END in scripts/build-codex.sh to match ROSTER.md")

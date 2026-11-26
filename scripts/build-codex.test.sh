@@ -194,6 +194,13 @@ roster_anchor_fails() { # <label> <sed edit of ROSTER.md>
 }
 roster_anchor_fails "a source ROSTER.md without the closing paragraph fails the build and says so" 's/^Fable 5 is the premium tier/The premium tier/'
 roster_anchor_fails "a source ROSTER.md without the model heading fails the build and says so" 's/^## Model tiers$/## Models/'
+# a heading at any level between the anchors fails too: the swap would drop it from the shipped ROSTER.md
+sed 's/^## Model tiers$/&\n### Effort/' "$root/ROSTER.md" > "$rsrc/ROSTER.md"
+if cmp -s "$rsrc/ROSTER.md" "$root/ROSTER.md"; then report "a ### heading between the model anchors fails the build and says so" false "the ### edit left ROSTER.md as the source has it"
+else
+  msg=$(bash "$rsrc/scripts/build-codex.sh" "$rout" 2>&1); c=$?
+  report "a ### heading between the model anchors fails the build and says so" "$([ "$c" -eq 1 ] && printf '%s' "$msg" | grep -qF "ROSTER.md: a heading sits between '## Model tiers' and the paragraph starting 'Fable 5 is the premium tier'" && [ ! -e "$rout" ] && echo true || echo false)" "exit $c [$msg]"
+fi
 cp "$root/ROSTER.md" "$rsrc/ROSTER.md"
 bash "$rsrc/scripts/build-codex.sh" "$rout" >/dev/null 2>&1; c=$?
 check "the same copy with ROSTER.md put back builds" '[ "$c" -eq 0 ]' "exit $c"
