@@ -38,7 +38,7 @@ git clone --depth 1 https://github.com/salasjustin/kru-codex "$HOME/.sky/kru-cod
 
 Then turn it on with the secret `SKY_CODEX_PLUGINS=kru@kru`: `sky secret set <env> SKY_CODEX_PLUGINS`.
 
-The image needs bash, Python 3.11 or later (the build reads TOML with `tomllib`), `git`, and `jq` for the hooks at run time. The build uses nothing else.
+The image needs bash, Python 3.11 or later (the build reads TOML with `tomllib`), `git`, and `jq` for the hooks at run time.
 
 Setup runs only when the environment is provisioned, so a run uses the kru-codex that was current at its environment's last provision.
 
