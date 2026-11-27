@@ -44,16 +44,16 @@ bash scripts/verify.sh                               # every check, the Codex bu
 
 ## Models
 
-Every seat runs on one of four models routed through AI Gateway, never a Claude model. `MODEL_TABLE` in `scripts/build-codex.sh` is the assignment source: four seat kinds, each on one model, and a new seat from upstream fails the build until it has a place in the table.
+Every seat runs on one of five allowed models routed through AI Gateway, never a Claude model and never any other. `MODEL_TABLE` in `scripts/build-codex.sh` is the assignment source: four seat kinds, each on one model, and a new seat from upstream fails the build until it has a place in the table. `moonshotai/kimi-k3` is allowed and takes no seat.
 
 | group | seats | model | price, USD per 1M in / out | efforts accepted |
 |---|---|---|---|---|
-| Deep engineering | 24: auth, payments, accounting, data, platform and long-horizon builders | `deepseek/deepseek-v4.1-flash-1017` | `$0.30` / `$1.20` | `none low high max` |
-| UI, tests and the code reviewer | 8 | `minimax/minimax-m3.1-flash` | `$0.15` / `$0.60` | `low medium high xhigh max` |
-| Planning and architecture review | 2: `planner`, `architecture-reviewer` | `moonshotai/kimi-k3.1-pro` | `$2` / `$10` | `low high max` |
-| Visual review and lighter repeated work | 7: `conversion-copywriter`, `ux-auditor`, `visual-reviewer`, `accessibility-reviewer`, `dispatch-auditor`, `toolchain-engineer`, `vercel-perf-optimizer` | `meta/muse-ember` | `$0.10` / `$0.50` | `minimal low medium high xhigh max` |
+| Deep engineering and UI builders | 30: auth, payments, accounting, data, platform and long-horizon builders, plus `react-ui-builder`, `svelte-ui-builder`, `hono-ui-builder`, `web-components-builder`, `extension-builder`, `motion-designer` | `deepseek/deepseek-v4.1-flash` | `$0.30` / `$1.20` | `none low high max` |
+| Test writer and code reviewer | 2: `code-reviewer`, `test-writer` | `zai/glm-5.3` | `$1.40` / `$4.40` | `low high max` |
+| Planning and architecture review | 2: `planner`, `architecture-reviewer` | `moonshotai/kimi-k3.1-pro` | `$2.00` / `$10.00` | `low high max` |
+| Visual review and lighter repeated work | 7: `conversion-copywriter`, `ux-auditor`, `visual-reviewer`, `accessibility-reviewer`, `dispatch-auditor`, `toolchain-engineer`, `vercel-perf-optimizer` | `zai/glm-5.3-flash` | `$0.15` / `$0.50` | `low high max` |
 
-A seat's `effort:` carries over as `model_reasoning_effort`; the build refuses a pin its model does not accept. Prices and supported efforts are from the Gateway catalog as of Nov 26, 2026. The choice and its evidence: `codex/PORTING.md` → *Models*.
+A seat's `effort:` carries over as `model_reasoning_effort`. No allowed model accepts `medium`, so where a model does not take the pin the build rounds it up to the nearest value it does take (`medium` becomes `high`) and prints a line naming the seat, the pin, the value used and the set. A pin that is not a `ReasoningEffort` value, or one with nothing accepted at or above it, fails the build. Prices and supported efforts are from the Gateway catalog as of Nov 27, 2026. The choice and its evidence: `codex/PORTING.md` → *Models*.
 
 ## What is missing
 

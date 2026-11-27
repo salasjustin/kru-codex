@@ -85,53 +85,79 @@ ROOT_NOTE = ("`<plugin-root>` below is the kru plugin directory: the one that ho
 # a seat whose description says it reports and does not edit gets a read-only sandbox
 READ_ONLY_SEAT = re.compile(r"\b(does not edit|no edits)\b|Reports only")
 
-# the model per seat. A Codex session runs on these models only, never a Claude one, and every seat
-# takes the one model of its kind ("*" is the only key: a seat's Claude `model:` pin is upstream
-# metadata and picks nothing). Its `effort:` carries over unchanged as
-# `model_reasoning_effort`, and MODEL_EFFORTS must list that effort for that model or the build fails.
+# the model per seat. A Codex session runs on the five ALLOWED gateway models only, never a Claude
+# one and never any other, and every seat takes the one model of its kind ("*" is the only key: a
+# seat's Claude `model:` pin is upstream metadata and picks nothing). Its `effort:` carries over as
+# `model_reasoning_effort` when the model accepts it; otherwise resolve_effort rounds it up.
 # Every seat is listed once: a seat in no kind, in two, or a name with no seat file fails the build
 # until the table is fixed.
-DEEP = "deepseek/deepseek-v4.1-flash-1017"
-UI = "minimax/minimax-m3.1-flash"
+DEEP = "deepseek/deepseek-v4.1-flash"
+GLM = "zai/glm-5.3"
+GLM_FLASH = "zai/glm-5.3-flash"
 KIMI = "moonshotai/kimi-k3.1-pro"
-LIGHT = "meta/muse-ember"
+# allowed and on no seat: the older model, and dearer than KIMI on both sides. it stays in the
+# allowed set so a table row can move to it without a code change
+KIMI_K3 = "moonshotai/kimi-k3"
+ALLOWED = {DEEP, GLM, GLM_FLASH, KIMI, KIMI_K3}
 MODEL_TABLE = [
     # kind       seats                                                                        model
-    ("Deep engineering", ["better-auth-specialist", "chariot-specialist", "cloudflare-builder",
-                          "express-builder", "fly-platform-engineer", "go-fullstack-builder", "hono-builder",
-                          "nextjs-builder", "node-developer", "nowpayments-specialist", "paypal-specialist",
-                          "postgres-architect", "python-developer", "quickbooks-specialist",
-                          "react-router-builder", "sanity-builder", "sqlite-architect", "stripe-specialist",
-                          "sveltekit-builder", "tanstack-start-builder", "turso-specialist",
-                          "vercel-platform-engineer", "zapier-specialist", "zig-developer"],
+    ("Deep engineering and UI builders", [
+        "better-auth-specialist", "chariot-specialist", "cloudflare-builder", "express-builder",
+        "fly-platform-engineer", "go-fullstack-builder", "hono-builder", "nextjs-builder", "node-developer",
+        "nowpayments-specialist", "paypal-specialist", "postgres-architect", "python-developer",
+        "quickbooks-specialist", "react-router-builder", "sanity-builder", "sqlite-architect",
+        "stripe-specialist", "sveltekit-builder", "tanstack-start-builder", "turso-specialist",
+        "vercel-platform-engineer", "zapier-specialist", "zig-developer",
+        "react-ui-builder", "svelte-ui-builder", "hono-ui-builder", "web-components-builder",
+        "extension-builder", "motion-designer"],
      {"*": DEEP}),
-    ("UI, tests and the code reviewer", ["react-ui-builder", "svelte-ui-builder", "hono-ui-builder",
-                                         "web-components-builder", "extension-builder", "motion-designer",
-                                         "test-writer", "code-reviewer"],
-     {"*": UI}),
+    ("Test writer and code reviewer", ["code-reviewer", "test-writer"],
+     {"*": GLM}),
     ("Planning and architecture review", ["planner", "architecture-reviewer"],
      {"*": KIMI}),
     ("Visual review and lighter repeated work", ["conversion-copywriter", "ux-auditor", "visual-reviewer",
                                                  "accessibility-reviewer", "dispatch-auditor",
                                                  "toolchain-engineer", "vercel-perf-optimizer"],
-     {"*": LIGHT}),
+     {"*": GLM_FLASH}),
 ]
-MODELS_ALL = {m for _, _, by_tier in MODEL_TABLE for m in by_tier.values()}
-# the reasoning efforts each gateway model accepts, from its `reasoning_options` in the public model
-# list (https://ai-gateway.vercel.sh/v1/models, reviewed 2026-11-26). the gateway rejects
-# a request with a pin outside this set, so the build refuses the pin rather than ship it.
+# seat_model and --check hold a seat's model to this set; an allowed model need not be in the table,
+# but every allowed model needs a MODEL_EFFORTS row
+MODELS_ALL = ALLOWED
+# the reasoning efforts each allowed model accepts, from its `reasoning_options` in the public model
+# list (https://ai-gateway.vercel.sh/v1/models, reviewed 2026-11-27). the gateway rejects
+# a request with an effort outside this set, so the build rounds a pin up into it or fails.
 MODEL_EFFORTS = {
     DEEP: {"none", "low", "high", "max"},
-    UI: {"low", "medium", "high", "xhigh", "max"},
+    GLM: {"low", "high", "max"},
+    GLM_FLASH: {"low", "high", "max"},
     KIMI: {"low", "high", "max"},
-    LIGHT: {"minimal", "low", "medium", "high", "xhigh", "max"},
+    KIMI_K3: {"low", "high", "max"},
 }
+EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+def accepted_list(model):
+    return ", ".join(sorted(MODEL_EFFORTS[model], key=EFFORT_ORDER.index))
 
 def effort_problem(seat, model, effort):
-    """a line when the seat's effort pin is not one its model accepts, else None."""
+    """a line when the effort is not one its model accepts, else None."""
     if effort and model in MODEL_EFFORTS and effort not in MODEL_EFFORTS[model]:
-        return f"agents/{seat}.md: effort {effort!r} is not one {model} accepts ({', '.join(sorted(MODEL_EFFORTS[model]))})"
+        return f"agents/{seat}.md: effort {effort!r} is not one {model} accepts ({accepted_list(model)})"
     return None
+
+def resolve_effort(seat, model, pin):
+    """(effort to ship, build line or None): the pin when the model accepts it, else the nearest
+    accepted value above it, with the line that says so. Fails the build when the pin is no
+    ReasoningEffort value or nothing the model accepts sits at or above it."""
+    if not pin:
+        return None, None
+    if pin not in EFFORT_ORDER:
+        die(f"agents/{seat}.md: effort {pin!r} is not a ReasoningEffort value; {model} accepts {accepted_list(model)}")
+    if pin in MODEL_EFFORTS[model]:
+        return pin, None
+    above = [e for e in EFFORT_ORDER[EFFORT_ORDER.index(pin):] if e in MODEL_EFFORTS[model]]
+    if not above:
+        die(f"{effort_problem(seat, model, pin)}, and none at or above it")
+    return above[0], f"agents/{seat}.md: effort {pin!r} -> {above[0]!r} ({model} accepts {accepted_list(model)})"
 
 def table_problems():
     """what is wrong with the table against the seat files, one line each."""
@@ -143,17 +169,16 @@ def table_problems():
     return bad
 
 def seat_model(seat, fm):
-    """(model, reasoning effort or None) for a seat, from its kind and its effort."""
+    """(model, reasoning effort or None, build line or None) for a seat, from its kind and its effort pin."""
     for kind, names, by_tier in MODEL_TABLE:
         if seat in names:
             model = by_tier.get("*")
             if not model:
                 die(f"agents/{seat}.md: kind {kind!r} of MODEL_TABLE has no model for any tier")
-            effort = fm.get("effort") or None
-            problem = effort_problem(seat, model, effort)
-            if problem:
-                die(problem)
-            return model, effort
+            if model not in ALLOWED:
+                die(f"agents/{seat}.md: kind {kind!r} of MODEL_TABLE is on {model}, which is not an allowed model")
+            effort, line = resolve_effort(seat, model, fm.get("effort") or None)
+            return model, effort, line
     die(f"agents/{seat}.md is in no seat kind of MODEL_TABLE")
 
 # the Codex build's hooks, as (event, matcher, hook, script args, timeout in s). each runs through
@@ -191,7 +216,7 @@ def die(msg):
     sys.exit(1)
 
 if MODELS_ALL != set(MODEL_EFFORTS):
-    die(f"MODEL_EFFORTS lists {sorted(MODEL_EFFORTS)} but MODEL_TABLE assigns {sorted(MODELS_ALL)}")
+    die(f"MODEL_EFFORTS lists {sorted(MODEL_EFFORTS)} but ALLOWED has {sorted(MODELS_ALL)}")
 
 def split_fm(text, where):
     if not text.startswith("---\n"):
@@ -243,7 +268,7 @@ def rewrite_root(text, root):
 # a Claude model id in a document becomes the gateway model fixed here for its family, whatever
 # model the seats pinned to that id run on
 OPUS, SONNET, HAIKU = "opus", "sonnet", "haiku"
-DOC_TIER_MODEL = {OPUS: DEEP, SONNET: UI, HAIKU: LIGHT}
+DOC_TIER_MODEL = {OPUS: DEEP, SONNET: GLM, HAIKU: GLM_FLASH}
 
 def tier_model(tier):
     return DOC_TIER_MODEL[tier]
@@ -255,7 +280,6 @@ def tier_model(tier):
 # otherwise ship the Claude table
 ROSTER_MODEL_START = "## Model tiers\n"
 ROSTER_MODEL_END = "Fable 5 is the premium tier"
-EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
 def roster_model_section():
     rows = ["| seat kind | seats | model | efforts accepted |", "|---|---|---|---|"]
@@ -266,8 +290,8 @@ def roster_model_section():
         rows.append(f"| {kind} | {seats} | `{model}` | {efforts} |")
     return (ROSTER_MODEL_START + "\n"
             "In this build every seat runs on the one gateway model of its seat kind, never a Claude model. "
-            "A seat's `effort:` carries over as `model_reasoning_effort`, and the build refuses one its model "
-            "does not accept. The lead runs on the session's model.\n\n"
+            "A seat's `effort:` carries over as `model_reasoning_effort`, and the build rounds one its model "
+            "does not accept up to the nearest value it does. The lead runs on the session's model.\n\n"
             + "\n".join(rows) + "\n\n"
             "`MODEL_TABLE` in `scripts/build-codex.sh` of kru-codex, the repository that builds this plugin "
             "from kru, is the source of this table; kru-codex's README has the prices in its *Models* section.\n")
@@ -408,7 +432,9 @@ def build_roles(out, root):
         lines = [ROLE_MARK, f"name = {toml_str(name)}", f"description = {toml_str(desc)}"]
         if READ_ONLY_SEAT.search(desc):
             lines.append('sandbox_mode = "read-only"')
-        model, effort = seat_model(name, fm)
+        model, effort, adjusted = seat_model(name, fm)
+        if adjusted:
+            print(f"build-codex: {adjusted}")
         lines.append(f"model = {toml_str(model)}")
         if effort:
             lines.append(f"model_reasoning_effort = {toml_str(effort)}")
@@ -591,14 +617,14 @@ def check(out):
         src = REPO / "agents" / f"{f.stem}.md"
         if src.is_file():
             fm = parse_fm(split_fm(src.read_text(encoding="utf-8"), f.stem)[0])
-            want = seat_model(f.stem, fm)
+            want = seat_model(f.stem, fm)[:2]
             problem = effort_problem(f.stem, t.get("model"), t.get("model_reasoning_effort"))
             if problem:
                 fail(f"{f.name}: {problem}")
             elif (t.get("model"), t.get("model_reasoning_effort")) != want:
                 fail(f"{f.name}: model {t.get('model')!r} / effort {t.get('model_reasoning_effort')!r} is not the table's {want}")
         if t.get("model") not in MODELS_ALL:
-            fail(f"{f.name}: model {t.get('model')!r} is not a gateway model")
+            fail(f"{f.name}: model {t.get('model')!r} is not one of the five allowed models")
     roster = out / "ROSTER.md"
     if roster.is_file() and roster_model_section() not in roster.read_text(encoding="utf-8"):
         fail("ROSTER.md: model section is not the one MODEL_TABLE gives")
