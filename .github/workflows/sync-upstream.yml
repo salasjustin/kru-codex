@@ -1,0 +1,81 @@
+name: sync-upstream
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+concurrency: { group: sync-upstream, cancel-in-progress: false }
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: fetch
+        name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/ap-justin/kru
+          git fetch upstream main
+          sha=$(git rev-parse --short upstream/main)
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "already on $sha"
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          fi
+      - id: merge
+        name: Merge upstream
+        if: steps.fetch.outputs.current != 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
+          git config merge.ours.driver true
+          git merge --no-edit upstream/main 2>&1 | tee "$RUNNER_TEMP/merge.log"
+      - run: command -v jq || (sudo apt-get update && sudo apt-get install -y jq)
+        if: steps.fetch.outputs.current != 'true'
+      - run: python3 -c 'import yaml' || (sudo apt-get update && sudo apt-get install -y python3-yaml)
+        if: steps.fetch.outputs.current != 'true'
+      - id: verify
+        name: Verify the merge
+        if: steps.fetch.outputs.current != 'true'
+        run: bash scripts/verify.sh 2>&1 | tee "$RUNNER_TEMP/verify.log"
+      # A push made with GITHUB_TOKEN does not start verify.yml; the step above ran the same checks.
+      - id: push
+        name: Push the merge
+        if: steps.fetch.outputs.current != 'true'
+        run: git push origin HEAD:main 2>&1 | tee "$RUNNER_TEMP/push.log"
+      - name: Close the blocked-sync issue
+        if: success()
+        run: |
+          n=$(gh issue list --state open --search 'Upstream sync blocked in:title' \
+            --json number,title --jq 'map(select(.title == "Upstream sync blocked"))[0].number // empty')
+          [ -n "$n" ] || exit 0
+          gh issue close "$n" --comment "Synced with upstream $(git rev-parse --short upstream/main)."
+      - name: Report a blocked sync
+        if: failure() && steps.fetch.outcome == 'success'
+        env:
+          MERGE: ${{ steps.merge.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        run: |
+          step=push
+          [ "$VERIFY" = failure ] && step=verify
+          [ "$MERGE" = failure ] && step=merge
+          {
+            printf 'Upstream sha: `%s`\nFailed step: %s\n\n' "$(git rev-parse --short upstream/main)" "$step"
+            printf '```\n'
+            tail -n 80 "$RUNNER_TEMP/$step.log" || true
+            printf '```\n'
+          } > "$RUNNER_TEMP/body.md"
+          n=$(gh issue list --state open --search 'Upstream sync blocked in:title' \
+            --json number,title --jq 'map(select(.title == "Upstream sync blocked"))[0].number // empty')
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --title 'Upstream sync blocked' --body-file "$RUNNER_TEMP/body.md"
+          fi

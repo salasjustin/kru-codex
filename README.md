@@ -28,6 +28,20 @@ enabled = true
 
 Then approve kru's hooks in Codex. The approval is tied to the plugin's files, so approve them again after every install that changed the build; until you do, Codex skips them.
 
+### In a Sky environment
+
+To give another repo's Sky runs kru in Codex, append this line to the `setup` in that environment's `env.yaml`. The first provision clones kru-codex (public) into `$HOME/.sky/kru-codex`, later ones fast-forward it, and each installs into the run's Codex home, `$HOME/.sky/codex`:
+
+```bash
+git clone --depth 1 https://github.com/salasjustin/kru-codex "$HOME/.sky/kru-codex" 2>/dev/null || git -C "$HOME/.sky/kru-codex" pull --ff-only; bash "$HOME/.sky/kru-codex/scripts/build-codex.sh" --install "$HOME/.sky/codex"
+```
+
+Then turn it on with the secret `SKY_CODEX_PLUGINS=kru@kru`: `sky secret set <env> SKY_CODEX_PLUGINS`.
+
+The image needs bash, Python 3.11 or later (the build reads TOML with `tomllib`), `git`, and `jq` for the hooks at run time. The build uses nothing else.
+
+Setup runs only when the environment is provisioned, so a run uses the kru-codex that was current at its environment's last provision.
+
 Other commands:
 
 ```bash
@@ -64,6 +78,10 @@ A seat's `effort:` carries over as `model_reasoning_effort`. No allowed model ac
 - The build has not yet run in a live Codex session.
 
 ## Keeping up with kru
+
+An hourly workflow (`.github/workflows/sync-upstream.yml`) does this for you. It fetches kru's `main` and, if there is anything new, merges it, runs `scripts/verify.sh`, and pushes the merge to `main`. When the merge conflicts or verify fails, it pushes nothing, opens an issue titled `Upstream sync blocked` (or comments on the open one) with the upstream sha, the failed step and the last 80 lines of its output, and fails the run. The next successful sync closes that issue. To sync at once, run *sync-upstream* from the Actions tab.
+
+To do it by hand:
 
 ```bash
 git fetch upstream && git merge upstream/main
