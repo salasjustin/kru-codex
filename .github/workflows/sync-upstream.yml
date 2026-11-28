@@ -95,6 +95,14 @@ jobs:
           n=$(gh issue list --state open --search 'Upstream sync blocked in:title' \
             --json number,title --jq 'map(select(.title == "Upstream sync blocked"))[0].number // empty')
           if [ -n "$n" ]; then
+            sha=$(git rev-parse --short upstream/main 2>/dev/null || echo unknown)
+            # the first report is the issue body, later ones are comments; a maintainer's comment is not a report
+            last=$(gh issue view "$n" --json body,comments \
+              --jq '([.comments[].body | select(startswith("Upstream sha: "))] | last) // .body // ""')
+            if grep -qF "Upstream sha: \`$sha\`" <<< "$last" && grep -qxF "Failed step: $step" <<< "$last"; then
+              echo "already reported $sha at $step"
+              exit 0
+            fi
             gh issue comment "$n" --body-file "$RUNNER_TEMP/body.md"
           else
             gh issue create --title 'Upstream sync blocked' --body-file "$RUNNER_TEMP/body.md"

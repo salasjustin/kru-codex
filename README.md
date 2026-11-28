@@ -30,17 +30,28 @@ Then approve kru's hooks in Codex. The approval is tied to the plugin's files, s
 
 ### In a Sky environment
 
-To give another repo's Sky runs kru in Codex, append this line to the `setup` in that environment's `env.yaml`. The first provision clones kru-codex (public) into `$HOME/.sky/kru-codex`, later ones fast-forward it, and each installs into the run's Codex home, `$HOME/.sky/codex`:
+To give another repo's Sky runs kru in Codex, put this `refresh` in that environment's `env.yaml`. Sky runs it before every run: the first run clones kru-codex (public) into `$HOME/.sky/kru-codex`, every run fast-forwards it, and each installs into the run's Codex home, `$HOME/.sky/codex`:
 
-```bash
-git clone --depth 1 https://github.com/salasjustin/kru-codex "$HOME/.sky/kru-codex" 2>/dev/null || git -C "$HOME/.sky/kru-codex" pull --ff-only; bash "$HOME/.sky/kru-codex/scripts/build-codex.sh" --install "$HOME/.sky/codex"
+```yaml
+refresh: |
+  [ -d "$HOME/.sky/kru-codex/.git" ] || git clone https://github.com/salasjustin/kru-codex "$HOME/.sky/kru-codex"
+  git -C "$HOME/.sky/kru-codex" pull --ff-only
+  bash "$HOME/.sky/kru-codex/scripts/build-codex.sh" --install "$HOME/.sky/codex"
 ```
 
 Then turn it on with the secret `SKY_CODEX_PLUGINS=kru@kru`: `sky secret set <env> SKY_CODEX_PLUGINS`.
 
-The image needs bash, Python 3.11 or later (the build reads TOML with `tomllib`), `git`, and `jq` for the hooks at run time.
+For an environment that already exists, set the refresh without reprovisioning it. Save the three script lines as `refresh.sh`, unindented and without the `refresh: |` line:
 
-Setup runs only when the environment is provisioned, so a run uses the kru-codex that was current at its environment's last provision.
+```bash
+sky env set-refresh <env> @refresh.sh
+```
+
+A `refresh` change never rebuilds the environment and is allowed while agents exist, so this is the way to install kru-codex in a busy environment. A `setup` change is refused there with `agents_exist`. No `setup` line is needed: the refresh does the first install and every update, so a merge to kru-codex (and, through the hourly sync, every kru release) reaches the next run.
+
+The refresh has 120 seconds by default. If the plugin is not installed afterwards, the run posts a `runner.warning` and goes on without kru. Sky's README has the rest: [*Per-run refresh*](https://github.com/salasjustin/sky#per-run-refresh) and the Plugins bullet under [*Codex runs*](https://github.com/salasjustin/sky#codex-runs).
+
+The image needs bash, Python 3.11 or later (the build reads TOML with `tomllib`), `git`, and `jq` for the hooks at run time.
 
 Other commands:
 
