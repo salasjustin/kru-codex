@@ -96,7 +96,8 @@ jobs:
             --json number,title --jq 'map(select(.title == "Upstream sync blocked"))[0].number // empty')
           if [ -n "$n" ]; then
             sha=$(git rev-parse --short upstream/main 2>/dev/null || echo unknown)
-            last=$(gh issue view "$n" --json comments --jq '.comments[-1].body // ""')
+            # the first report is the issue body, later ones are comments
+            last=$(gh issue view "$n" --json body,comments --jq '(.comments[-1].body) // .body // ""')
             if grep -qF "Upstream sha: \`$sha\`" <<< "$last" && grep -qxF "Failed step: $step" <<< "$last"; then
               echo "already reported $sha at $step"
               exit 0
