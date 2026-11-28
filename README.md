@@ -41,7 +41,7 @@ refresh: |
 
 Then turn it on with the secret `SKY_CODEX_PLUGINS=kru@kru`: `sky secret set <env> SKY_CODEX_PLUGINS`.
 
-For an environment that already exists, set the refresh without reprovisioning it (save the script as `refresh.sh`):
+For an environment that already exists, set the refresh without reprovisioning it. Save the three lines under `refresh: |` as `refresh.sh`, without the `refresh: |` line or the indent, since the file is the bare script:
 
 ```bash
 sky env set-refresh <env> @refresh.sh
