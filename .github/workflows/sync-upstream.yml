@@ -15,6 +15,8 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
+      # the `upstream` remote added below outranks origin in gh's repo resolution
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,7 +25,7 @@ jobs:
         name: Fetch upstream
         run: |
           git remote add upstream https://github.com/ap-justin/kru
-          git fetch upstream main
+          git fetch upstream main 2>&1 | tee "$RUNNER_TEMP/fetch.log"
           sha=$(git rev-parse --short upstream/main)
           if git merge-base --is-ancestor upstream/main HEAD; then
             echo "already on $sha"
@@ -37,9 +39,11 @@ jobs:
           git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
           git config merge.ours.driver true
           git merge --no-edit upstream/main 2>&1 | tee "$RUNNER_TEMP/merge.log"
-      - run: command -v jq || (sudo apt-get update && sudo apt-get install -y jq)
+      - id: jq
+        run: command -v jq || (sudo apt-get update && sudo apt-get install -y jq)
         if: steps.fetch.outputs.current != 'true'
-      - run: python3 -c 'import yaml' || (sudo apt-get update && sudo apt-get install -y python3-yaml)
+      - id: yaml
+        run: python3 -c 'import yaml' || (sudo apt-get update && sudo apt-get install -y python3-yaml)
         if: steps.fetch.outputs.current != 'true'
       - id: verify
         name: Verify the merge
@@ -57,20 +61,36 @@ jobs:
             --json number,title --jq 'map(select(.title == "Upstream sync blocked"))[0].number // empty')
           [ -n "$n" ] || exit 0
           gh issue close "$n" --comment "Synced with upstream $(git rev-parse --short upstream/main)."
+      # Only a failure of a sync step reports; a failed close step after a landed push stays a red run.
       - name: Report a blocked sync
-        if: failure() && steps.fetch.outcome == 'success'
+        if: >-
+          failure() && (steps.fetch.outcome == 'failure' || steps.merge.outcome == 'failure'
+          || steps.jq.outcome == 'failure' || steps.yaml.outcome == 'failure'
+          || steps.verify.outcome == 'failure' || steps.push.outcome == 'failure')
         env:
-          MERGE: ${{ steps.merge.outcome }}
-          VERIFY: ${{ steps.verify.outcome }}
+          OUTCOMES: >-
+            fetch=${{ steps.fetch.outcome }} merge=${{ steps.merge.outcome }}
+            jq=${{ steps.jq.outcome }} yaml=${{ steps.yaml.outcome }}
+            verify=${{ steps.verify.outcome }} push=${{ steps.push.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          step=push
-          [ "$VERIFY" = failure ] && step=verify
-          [ "$MERGE" = failure ] && step=merge
+          step=unknown
+          for o in $OUTCOMES; do
+            [ "${o#*=}" = failure ] && { step=${o%%=*}; break; }
+          done
+          log="$RUNNER_TEMP/$step.log"
           {
-            printf 'Upstream sha: `%s`\nFailed step: %s\n\n' "$(git rev-parse --short upstream/main)" "$step"
-            printf '```\n'
-            tail -n 80 "$RUNNER_TEMP/$step.log" || true
-            printf '```\n'
+            printf 'Upstream sha: `%s`\nFailed step: %s\nRun: %s\n' \
+              "$(git rev-parse --short upstream/main 2>/dev/null || echo unknown)" "$step" "$RUN_URL"
+            if [ -s "$log" ]; then
+              tail -n 80 "$log" > "$RUNNER_TEMP/tail.log"
+              # a fence longer than any backtick run in the log, so log text cannot close it
+              fence='```'
+              while grep -qF "$fence" "$RUNNER_TEMP/tail.log"; do fence+='`'; done
+              printf '\n%s\n' "$fence"
+              cat "$RUNNER_TEMP/tail.log"
+              printf '%s\n' "$fence"
+            fi
           } > "$RUNNER_TEMP/body.md"
           n=$(gh issue list --state open --search 'Upstream sync blocked in:title' \
             --json number,title --jq 'map(select(.title == "Upstream sync blocked"))[0].number // empty')
